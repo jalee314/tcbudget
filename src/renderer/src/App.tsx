@@ -192,6 +192,20 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  // ─── Filtered inventory and parent item name (MUST be before early return) ───
+  const filteredInventory = useMemo(() => {
+    if (activeParentFilter) {
+      return inventory.filter(c => c.parent_id === activeParentFilter)
+    }
+    return inventory
+  }, [inventory, activeParentFilter])
+
+  const parentItemName = useMemo(() => {
+    if (!activeParentFilter) return null
+    const parent = inventory.find(c => c.id === activeParentFilter)
+    return parent ? parent.name : 'Unknown Item'
+  }, [inventory, activeParentFilter])
+
   if (isLoading) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -207,19 +221,6 @@ export default function App() {
       </div>
     )
   }
-
-  const filteredInventory = useMemo(() => {
-    if (activeParentFilter) {
-      return inventory.filter(c => c.parent_id === activeParentFilter)
-    }
-    return inventory
-  }, [inventory, activeParentFilter])
-
-  const parentItemName = useMemo(() => {
-    if (!activeParentFilter) return null
-    const parent = inventory.find(c => c.id === activeParentFilter)
-    return parent ? parent.name : 'Unknown Item'
-  }, [inventory, activeParentFilter])
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">

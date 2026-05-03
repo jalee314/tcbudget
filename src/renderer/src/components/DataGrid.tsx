@@ -4,14 +4,9 @@ import {
   ColDef,
   CellValueChangedEvent,
   ICellRendererParams,
-  ValueFormatterParams,
-  ModuleRegistry,
-  ClientSideRowModelModule
+  ValueFormatterParams
 } from 'ag-grid-community'
 import { InventoryCard } from '../types'
-
-// Register AG Grid modules
-ModuleRegistry.registerModules([ClientSideRowModelModule])
 
 interface DataGridProps {
   rowData: InventoryCard[]
