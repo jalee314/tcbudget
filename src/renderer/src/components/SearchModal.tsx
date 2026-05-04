@@ -160,7 +160,10 @@ function PulledFromCombobox({
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0 ${selected.is_opened ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-600'}`}>
               {selected.is_opened ? 'Opened' : 'Sealed'}
             </span>
-            <span className="flex-1 text-sm truncate text-surface-900">{selected.name}</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-surface-900 truncate">{selected.name}</div>
+              <div className="text-[11px] text-surface-500 truncate">{selected.set_name}</div>
+            </div>
             <button onClick={handleClear} className="text-surface-400 hover:text-surface-700 flex-shrink-0 text-lg leading-none">×</button>
           </>
         ) : (
@@ -195,8 +198,10 @@ function PulledFromCombobox({
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0 ${item.is_opened ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-600'}`}>
                   {item.is_opened ? 'Opened' : 'Sealed'}
                 </span>
-                <span className="text-surface-900 truncate flex-1">{item.name}</span>
-                <span className="text-[11px] text-surface-400 flex-shrink-0">{item.set_name}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-surface-900 truncate">{item.name}</div>
+                  <div className="text-[11px] text-surface-400 truncate">{item.set_name}</div>
+                </div>
               </button>
             ))
           )}
@@ -365,7 +370,7 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
 
   // ─── Shared detail form (shown when an item is selected on cards/sealed tabs) ──
   const DetailForm = selectedItem ? (
-    <div className="animate-slide-up">
+    <div className="animate-slide-up pb-16">
       <button onClick={() => setSelectedItem(null)} className="flex items-center gap-1 text-xs text-surface-600 hover:text-surface-900 mb-4 transition-colors">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="m15 18-6-6 6-6"/>
@@ -379,24 +384,27 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
               <img src={selectedItem.data.image_url} alt={selectedItem.data.name} className="w-full" />
             </div>
           ) : (
-            <div className="rounded-xl overflow-hidden bg-surface-100 border border-surface-200 flex flex-col items-center justify-center aspect-[3/4] gap-2">
+            <div className="card-image-container rounded-xl overflow-hidden bg-surface-200 shadow-sm border border-surface-200">
               {selectedItem.data.image_url ? (
-                <img src={selectedItem.data.image_url} alt={selectedItem.data.name} className="w-3/4 object-contain opacity-80" />
+                <img src={selectedItem.data.image_url} alt={selectedItem.data.name} className="w-full" />
               ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-surface-400">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                </svg>
+                <div className="aspect-[3/4] flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-surface-400">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                  </svg>
+                </div>
               )}
-              <span className="text-[10px] font-semibold text-surface-400 uppercase tracking-wider">{selectedItem.data.product_type}</span>
             </div>
           )}
         </div>
         <div className="flex-1 space-y-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${selectedItem.type === 'sealed' ? 'bg-blue-100 text-blue-700' : 'bg-surface-100 text-surface-600'}`}>
-                {selectedItem.type === 'sealed' ? selectedItem.data.product_type : 'Card'}
-              </span>
+              {(selectedItem.type !== 'sealed' || selectedItem.data.product_type !== 'Other') && (
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${selectedItem.type === 'sealed' ? 'bg-blue-100 text-blue-700' : 'bg-surface-100 text-surface-600'}`}>
+                  {selectedItem.type === 'sealed' ? selectedItem.data.product_type : 'Card'}
+                </span>
+              )}
             </div>
             <h3 className="text-xl font-bold text-surface-900">{selectedItem.data.name}</h3>
             <p className="text-sm text-surface-500 mt-1">{selectedItem.data.set_name}</p>
@@ -412,8 +420,22 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-1 block">Purchase Price</label>
-              <input type="number" step="0.01" placeholder={displayedMarketPrice.toFixed(2)} value={purchasePrice} onChange={e => setPurchasePrice(e.target.value)} className="input-dark py-2 text-sm font-mono" />
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-surface-500">Purchase Price</label>
+                <label className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-surface-500 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={purchasePrice === '0'}
+                    onChange={(e) => setPurchasePrice(e.target.checked ? '0' : '')}
+                    className="accent-accent w-3 h-3"
+                  />
+                  Gifted
+                </label>
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500 text-sm font-mono pointer-events-none">$</span>
+                <input type="text" inputMode="decimal" placeholder={displayedMarketPrice.toFixed(2)} value={purchasePrice} onChange={e => setPurchasePrice(e.target.value)} disabled={purchasePrice === '0'} className="input-dark py-2 text-sm font-mono !pl-7 disabled:opacity-60" />
+              </div>
             </div>
             <div>
               <label className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-1 block">Quantity</label>
@@ -436,7 +458,7 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-1 block">
                     Pulled From <span className="text-surface-400 font-normal">(optional)</span>
                   </label>
-                  <PulledFromCombobox sealedItems={sealedItems} value={parentId} onChange={setParentId} />
+                  <PulledFromCombobox sealedItems={sealedItems} value={parentId} onChange={(id) => { setParentId(id); if (id) setPurchasePrice('0') }} />
                 </div>
               </>
             )}
@@ -452,7 +474,7 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
       onClick={handleBackdropClick}
     >
       <div
-        className="glass-card w-full max-w-2xl max-h-[85vh] flex flex-col animate-scale-in"
+        className="glass-card w-full max-w-2xl h-[85vh] flex flex-col animate-scale-in"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -529,7 +551,9 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 mb-0.5">
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold flex-shrink-0">{product.product_type}</span>
+                              {product.product_type !== 'Other' && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold flex-shrink-0">{product.product_type}</span>
+                              )}
                             </div>
                             <div className="text-sm font-medium text-surface-900 group-hover:text-black truncate">{product.name}</div>
                             <div className="text-[11px] text-surface-500 truncate">{product.set_name} · {product.pack_count} packs</div>
@@ -590,7 +614,7 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                           className="flex items-center gap-3 p-3 rounded-lg text-left w-full hover:bg-surface-50 border border-transparent hover:border-surface-200 transition-all duration-200 group"
                         >
                           <div className="w-10 h-14 rounded-md overflow-hidden flex-shrink-0 bg-surface-200">
-                            <img src={card.image_url} alt={card.name} className="w-full h-full object-cover transition-transform group-hover:scale-110" loading="lazy" />
+                            <img src={card.image_url} alt={card.name} className="w-full h-full object-cover" loading="lazy" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium text-surface-900 group-hover:text-black truncate">{card.name}</div>
@@ -629,14 +653,31 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-surface-700 mb-1.5 block">Market Value ($)</label>
-                  <input type="number" step="0.01" value={manualMarketPrice} onChange={e => setManualMarketPrice(e.target.value)} placeholder="0.00" className="input-dark py-2.5 font-mono" />
+                  <label className="text-xs font-semibold text-surface-700 mb-1.5 block">Market Value</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500 text-sm font-mono pointer-events-none">$</span>
+                    <input type="text" inputMode="decimal" value={manualMarketPrice} onChange={e => setManualMarketPrice(e.target.value)} placeholder="0.00" className="input-dark py-2.5 font-mono !pl-7" />
+                  </div>
                 </div>
               </div>
               <div className="pt-4 border-t border-surface-200 grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-semibold text-surface-700 mb-1.5 block">Purchase Price ($)</label>
-                  <input type="number" step="0.01" value={purchasePrice} onChange={e => setPurchasePrice(e.target.value)} placeholder="0.00" className="input-dark py-2.5 font-mono" />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-surface-700">Purchase Price</label>
+                    <label className="flex items-center gap-1 text-[11px] font-semibold text-surface-500 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={purchasePrice === '0'}
+                        onChange={(e) => setPurchasePrice(e.target.checked ? '0' : '')}
+                        className="accent-accent w-3 h-3"
+                      />
+                      Gifted
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500 text-sm font-mono pointer-events-none">$</span>
+                    <input type="text" inputMode="decimal" value={purchasePrice} onChange={e => setPurchasePrice(e.target.value)} disabled={purchasePrice === '0'} placeholder="0.00" className="input-dark py-2.5 font-mono !pl-7 disabled:opacity-60" />
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-surface-700 mb-1.5 block">Quantity</label>
@@ -659,7 +700,7 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                     <label className="text-xs font-semibold text-surface-700 mb-1.5 block">
                       Pulled From <span className="text-surface-400 font-normal">(optional)</span>
                     </label>
-                    <PulledFromCombobox sealedItems={sealedItems} value={parentId} onChange={setParentId} />
+                    <PulledFromCombobox sealedItems={sealedItems} value={parentId} onChange={(id) => { setParentId(id); if (id) setPurchasePrice('0') }} />
                   </div>
                 )}
               </div>

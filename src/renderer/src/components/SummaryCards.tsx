@@ -69,7 +69,7 @@ export default function SummaryCards({ summary }: SummaryCardsProps) {
   const realizedVariant = summary.realizedGains >= 0 ? 'gain' : 'loss'
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-5 py-4 animate-fade-in">
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 px-5 py-4 animate-fade-in">
       <StatCard
         label="Market Value"
         value={formatCurrency(summary.totalMarketValue)}
@@ -101,6 +101,29 @@ export default function SummaryCards({ summary }: SummaryCardsProps) {
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points={summary.unrealizedPL >= 0 ? "22 7 13.5 15.5 8.5 10.5 2 17" : "22 17 13.5 8.5 8.5 13.5 2 7"}/>
             <polyline points={summary.unrealizedPL >= 0 ? "16 7 22 7 22 13" : "16 17 22 17 22 11"}/>
+          </svg>
+        }
+      />
+      <StatCard
+        label="Sold vs Market"
+        value={summary.soldVsMarketPercent == null ? '—' : `${summary.soldVsMarketPercent.toFixed(1)}%`}
+        subValue={
+          summary.soldVsMarketPercent == null
+            ? 'No sales yet'
+            : summary.soldVsMarketPercent >= 80
+              ? 'On target'
+              : 'Below target'
+        }
+        variant={
+          summary.soldVsMarketPercent == null
+            ? 'default'
+            : summary.soldVsMarketPercent >= 80
+              ? 'gain'
+              : 'loss'
+        }
+        icon={
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>
           </svg>
         }
       />

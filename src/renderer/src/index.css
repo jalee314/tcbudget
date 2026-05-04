@@ -107,6 +107,32 @@ body {
   padding-left: 16px;
   padding-right: 16px;
   font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+
+.ag-theme-custom-light .ag-cell-value {
+  overflow: hidden;
+  min-width: 0;
+}
+
+.ag-theme-custom-light .ag-cell-inline-editing {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 16px !important;
+  height: 100% !important;
+}
+
+.ag-theme-custom-light .ag-cell-inline-editing .ag-input-field-input,
+.ag-theme-custom-light .ag-cell-inline-editing input,
+.ag-theme-custom-light .ag-cell-inline-editing textarea {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  font: inherit !important;
+  color: inherit !important;
 }
 
 .ag-theme-custom-light .ag-cell-focus:not(.ag-cell-range-selected) {

@@ -8,6 +8,14 @@ import {
 } from 'ag-grid-community'
 import { InventoryCard } from '../types'
 
+type GridRow = InventoryCard & {
+  __isGroup?: boolean
+  __inGroup?: boolean
+  __groupKey?: string
+  __lotCount?: number
+  __expanded?: boolean
+}
+
 interface DataGridProps {
   rowData: InventoryCard[]
   onCellValueChanged: (id: string, field: string, value: unknown) => void
@@ -19,12 +27,50 @@ interface DataGridProps {
 
 // ─── Custom Cell Renderers ──────────────────────────────────────────────
 
-function CardNameRenderer(props: ICellRendererParams<InventoryCard>) {
+function CardNameRenderer(props: ICellRendererParams<GridRow> & { onToggleGroup?: (key: string) => void }) {
   const data = props.data
   if (!data) return null
 
+  if (data.__isGroup) {
+    return (
+      <button
+        onClick={() => props.onToggleGroup?.(data.__groupKey!)}
+        className="flex items-center gap-3 overflow-hidden w-full text-left hover:bg-surface-100/50 -mx-4 px-4 py-1 rounded transition-colors"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={`text-surface-500 transition-transform flex-shrink-0 ${data.__expanded ? 'rotate-90' : ''}`}
+        >
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+        {data.image_url && (
+          <div className="w-8 h-11 rounded overflow-hidden flex-shrink-0 bg-surface-200">
+            <img src={data.image_url} alt={data.name} className="w-full h-full object-cover" loading="lazy" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-surface-900 truncate flex items-center gap-2">
+            {data.name}
+            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-accent/15 text-accent-dark">
+              {data.__lotCount} lots
+            </span>
+          </div>
+          <div className="text-[11px] text-surface-500 truncate">{data.set_name} · {data.card_number}</div>
+        </div>
+      </button>
+    )
+  }
+
   return (
-    <div className="flex items-center gap-3">
+    <div className={`flex items-center gap-3 overflow-hidden w-full ${data.__inGroup ? 'pl-6' : ''}`}>
       {data.image_url && (
         <div className="w-8 h-11 rounded overflow-hidden flex-shrink-0 bg-surface-200">
           <img
@@ -38,15 +84,18 @@ function CardNameRenderer(props: ICellRendererParams<InventoryCard>) {
           />
         </div>
       )}
-      <div className="min-w-0">
-        <div className="text-sm font-medium text-surface-900 truncate">{data.name}</div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-surface-900 truncate">
+          {data.__inGroup ? <span className="text-surface-500 text-xs">Lot · </span> : null}
+          {data.name}
+        </div>
         <div className="text-[11px] text-surface-500 truncate">{data.set_name} · {data.card_number}</div>
       </div>
     </div>
   )
 }
 
-function PLRenderer(props: ICellRendererParams<InventoryCard>) {
+function PLRenderer(props: ICellRendererParams<GridRow>) {
   const data = props.data
   if (!data) return null
 
@@ -60,7 +109,7 @@ function PLRenderer(props: ICellRendererParams<InventoryCard>) {
   )
 }
 
-function ReturnRenderer(props: ICellRendererParams<InventoryCard>) {
+function ReturnRenderer(props: ICellRendererParams<GridRow>) {
   const data = props.data
   if (!data || data.purchase_price === 0) return <span className="text-surface-400">—</span>
 
@@ -80,10 +129,13 @@ function ReturnRenderer(props: ICellRendererParams<InventoryCard>) {
   )
 }
 
-function StatusRenderer(props: ICellRendererParams<InventoryCard>) {
+function StatusRenderer(props: ICellRendererParams<GridRow>) {
   const data = props.data
   if (!data) return null
-  const isSold = data.is_sold === 1
+  if (data.__isGroup) {
+    return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider bg-surface-100 text-surface-500">Lots</span>
+  }
+  const isSold = !!data.is_sold
   const isOpened = data.is_opened === 1 && !isSold
 
   if (isSold) {
@@ -95,15 +147,16 @@ function StatusRenderer(props: ICellRendererParams<InventoryCard>) {
   return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider badge-held">Held</span>
 }
 
-function ActionsRenderer(props: ICellRendererParams<InventoryCard> & {
+function ActionsRenderer(props: ICellRendererParams<GridRow> & {
   onDelete: (id: string) => void
   onToggleSold: (card: InventoryCard) => void
   onToggleOpened: (card: InventoryCard) => void
   onViewContents?: (id: string) => void
 }) {
   const data = props.data
-  if (!data) return null
+  if (!data || data.__isGroup) return null
 
+  const isSold = !!data.is_sold
   const isSealed = data.item_type === 'Sealed'
   const isOpened = data.is_opened === 1
 
@@ -125,7 +178,7 @@ function ActionsRenderer(props: ICellRendererParams<InventoryCard> & {
       )}
 
       {/* Open/seal toggle — only for sealed items that aren't sold */}
-      {isSealed && !data.is_sold && (
+      {isSealed && !isSold && (
         <button
           onClick={() => props.onToggleOpened(data)}
           className={`p-1.5 rounded-md transition-all ${isOpened ? 'text-amber-500 hover:text-amber-700 hover:bg-amber-50' : 'text-surface-500 hover:text-amber-600 hover:bg-amber-50'}`}
@@ -145,10 +198,10 @@ function ActionsRenderer(props: ICellRendererParams<InventoryCard> & {
       <button
         onClick={() => props.onToggleSold(data)}
         className="p-1.5 rounded-md text-surface-500 hover:text-surface-900 hover:bg-surface-200 transition-all"
-        title={data.is_sold ? 'Mark as Held' : 'Mark as Sold'}
+        title={isSold ? 'Mark as Held' : 'Mark as Sold'}
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          {data.is_sold ? (
+          {isSold ? (
             <><path d="M3 12h18"/><path d="m8 7-5 5 5 5"/></>
           ) : (
             <><path d="M20 6 9 17l-5-5"/></>
@@ -191,6 +244,16 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
   const gridRef = useRef<AgGridReact>(null)
   const [filterText, setFilterText] = useState('')
   const [viewFilter, setViewFilter] = useState<'all' | 'cards' | 'sealed'>('all')
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+
+  const toggleGroup = useCallback((key: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
 
   const filteredByType = useMemo(() => {
     if (viewFilter === 'cards') return rowData.filter(c => c.item_type === 'Card')
@@ -198,15 +261,70 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
     return rowData
   }, [rowData, viewFilter])
 
-  const columnDefs = useMemo<ColDef<InventoryCard>[]>(() => [
+  // Build grid rows with lot grouping for held items that share a card_id but differ in purchase_price.
+  const gridRows = useMemo<GridRow[]>(() => {
+    const groupable: InventoryCard[] = []
+    const ungrouped: InventoryCard[] = []
+    for (const c of filteredByType) {
+      if (!c.is_sold && !c.is_opened && c.card_id) groupable.push(c)
+      else ungrouped.push(c)
+    }
+
+    const buckets = new Map<string, InventoryCard[]>()
+    for (const c of groupable) {
+      const key = `${c.card_id}|${c.condition || ''}|${c.variant_id || ''}`
+      const arr = buckets.get(key) ?? []
+      arr.push(c)
+      buckets.set(key, arr)
+    }
+
+    const out: GridRow[] = []
+    for (const [key, lots] of buckets) {
+      const distinctPrices = new Set(lots.map(l => l.purchase_price))
+      if (lots.length >= 2 && distinctPrices.size >= 2) {
+        const totalQty = lots.reduce((s, l) => s + l.quantity, 0)
+        const totalCost = lots.reduce((s, l) => s + l.purchase_price * l.quantity, 0)
+        const avgCost = totalQty > 0 ? totalCost / totalQty : 0
+        const sample = lots[0]
+        const isExpanded = expandedGroups.has(key)
+        const groupRow: GridRow = {
+          ...sample,
+          id: `__group__${key}`,
+          quantity: totalQty,
+          purchase_price: avgCost,
+          notes: '',
+          sale_price: 0,
+          sale_date: '',
+          is_sold: 0,
+          is_opened: 0,
+          __isGroup: true,
+          __groupKey: key,
+          __lotCount: lots.length,
+          __expanded: isExpanded
+        }
+        out.push(groupRow)
+        if (isExpanded) {
+          for (const lot of lots) out.push({ ...lot, __inGroup: true, __groupKey: key })
+        }
+      } else {
+        for (const lot of lots) out.push(lot)
+      }
+    }
+    for (const u of ungrouped) out.push(u)
+    return out
+  }, [filteredByType, expandedGroups])
+
+  const columnDefs = useMemo<ColDef<GridRow>[]>(() => [
     {
       headerName: 'Item',
       field: 'name',
       cellRenderer: CardNameRenderer,
+      cellRendererParams: { onToggleGroup: toggleGroup },
       minWidth: 260,
       flex: 2,
       filter: 'agTextColumnFilter',
-      pinned: 'left' as const
+      pinned: 'left' as const,
+      tooltipValueGetter: (params) => params.data?.name ?? ''
     },
     {
       headerName: 'Rarity',
@@ -219,7 +337,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       headerName: 'Condition',
       field: 'condition',
       width: 120,
-      editable: true,
+      editable: (params) => !params.data?.__isGroup,
       cellEditor: 'agSelectCellEditor',
       cellEditorParams: {
         values: ['Raw', 'Raw NM', 'Raw LP', 'Raw MP', 'Raw HP', 'PSA 10', 'PSA 9', 'PSA 8', 'PSA 7', 'CGC 10', 'CGC 9.5', 'CGC 9', 'BGS 10', 'BGS 9.5', 'BGS 9', 'Sealed']
@@ -230,7 +348,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       headerName: 'Qty',
       field: 'quantity',
       width: 80,
-      editable: true,
+      editable: (params) => !params.data?.__isGroup,
       cellDataType: 'number',
       cellClass: 'text-center font-mono'
     },
@@ -238,10 +356,13 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       headerName: 'Purchase',
       field: 'purchase_price',
       width: 120,
-      editable: true,
+      editable: (params) => !params.data?.__isGroup,
       cellDataType: 'number',
-      valueFormatter: currencyFormatter,
-      cellClass: 'font-mono text-surface-700'
+      valueFormatter: (params) => {
+        if (params.data?.__isGroup) return `~${currencyFormatter(params)}`
+        return currencyFormatter(params)
+      },
+      cellClass: (params) => params.data?.__isGroup ? 'font-mono text-surface-500 italic' : 'font-mono text-surface-700'
     },
     {
       headerName: 'Market',
@@ -284,10 +405,18 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
     },
     {
       headerName: 'Status',
-      field: 'is_sold',
+      colId: 'status',
       cellRenderer: StatusRenderer,
       width: 100,
-      filter: 'agTextColumnFilter'
+      filter: false,
+      sortable: true,
+      valueGetter: (params) => {
+        const d = params.data
+        if (!d || d.__isGroup) return ''
+        if (d.is_sold) return 'Sold'
+        if (d.is_opened) return 'Opened'
+        return 'Held'
+      }
     },
     {
       headerName: 'Sale Price',
@@ -305,10 +434,25 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       }
     },
     {
+      headerName: '% of Market',
+      colId: 'sold_vs_market',
+      width: 120,
+      valueGetter: (params) => {
+        const d = params.data
+        if (!d || d.__isGroup || !d.is_sold || !d.market_price) return null
+        return (d.sale_price / d.market_price) * 100
+      },
+      valueFormatter: (params) => params.value == null ? '—' : `${(params.value as number).toFixed(1)}%`,
+      cellClass: (params) => {
+        if (params.value == null) return 'text-surface-400 font-mono text-xs'
+        return (params.value as number) >= 80 ? 'font-mono text-xs text-gain' : 'font-mono text-xs text-loss'
+      }
+    },
+    {
       headerName: 'Date',
       field: 'purchase_date',
       width: 110,
-      editable: true,
+      editable: (params) => !params.data?.__isGroup,
       cellClass: 'text-surface-500 text-xs font-mono'
     },
     {
@@ -316,12 +460,13 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       field: 'notes',
       minWidth: 140,
       flex: 1,
-      editable: true,
+      editable: (params) => !params.data?.__isGroup,
       cellClass: 'text-surface-500 text-xs'
     },
     {
       headerName: '',
-      field: 'id',
+      colId: 'actions',
+      valueGetter: (params) => params.data ? `${params.data.is_sold}|${params.data.is_opened}` : '',
       width: 140,
       cellRenderer: ActionsRenderer,
       cellRendererParams: {
@@ -334,7 +479,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       sortable: false,
       filter: false
     }
-  ], [onDeleteRow, onToggleSold, onToggleOpened, onViewContents])
+  ], [onDeleteRow, onToggleSold, onToggleOpened, onViewContents, toggleGroup])
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
@@ -343,8 +488,8 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
     cellStyle: { lineHeight: 'normal' }
   }), [])
 
-  const handleCellValueChanged = useCallback((event: CellValueChangedEvent<InventoryCard>) => {
-    if (event.data && event.colDef.field) {
+  const handleCellValueChanged = useCallback((event: CellValueChangedEvent<GridRow>) => {
+    if (event.data && !event.data.__isGroup && event.colDef.field) {
       onCellValueChanged(event.data.id, event.colDef.field, event.newValue)
     }
   }, [onCellValueChanged])
@@ -392,15 +537,13 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
 
       {/* AG Grid */}
       <div className="flex-1 px-5 pb-4">
-        <div className="ag-theme-custom-light w-full h-full rounded-xl overflow-hidden glass-card-subtle">
-          <AgGridReact<InventoryCard>
+        <div className="ag-theme-alpine ag-theme-custom-light w-full h-full rounded-xl overflow-hidden glass-card-subtle">
+          <AgGridReact<GridRow>
             ref={gridRef}
-            rowData={filteredByType}
+            rowData={gridRows}
             columnDefs={columnDefs}
             defaultColDef={defaultColDef}
             onCellValueChanged={handleCellValueChanged}
-            rowSelection={{ mode: 'multiRow' }}
-            suppressRowClickSelection={true}
             pagination={false}
             getRowId={(params) => params.data.id}
             domLayout="normal"
@@ -408,6 +551,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
             rowHeight={52}
             suppressCellFocus={false}
             enableCellTextSelection={true}
+            enableBrowserTooltips={true}
             tooltipShowDelay={500}
           />
         </div>

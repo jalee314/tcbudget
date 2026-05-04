@@ -3,8 +3,8 @@ import Header from './components/Header'
 import SummaryCards from './components/SummaryCards'
 import DataGrid from './components/DataGrid'
 import SearchModal from './components/SearchModal'
+import SellModal from './components/SellModal'
 import { InventoryCard, SearchCard, PortfolioSummary } from './types'
-import { SEED_INVENTORY } from './data/mockCards'
 import { v4 as uuidv4 } from 'uuid'
 
 export default function App() {
@@ -13,25 +13,29 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [activeParentFilter, setActiveParentFilter] = useState<string | null>(null)
+  const [sellingCard, setSellingCard] = useState<InventoryCard | null>(null)
 
   // ─── Load data on mount ────────────────────────────────────────────
   useEffect(() => {
     async function loadData() {
       try {
         if (window.electronAPI) {
-          const count = await window.electronAPI.db.getCount()
-          if (count === 0) {
-            await window.electronAPI.db.bulkInsert(SEED_INVENTORY as Record<string, unknown>[])
+          // One-time wipe of all pre-existing demo data.
+          if (!localStorage.getItem('seed_cleanup_v2')) {
+            const existing = await window.electronAPI.db.getAll() as unknown as InventoryCard[]
+            for (const row of existing) {
+              await window.electronAPI.db.delete(row.id)
+            }
+            localStorage.setItem('seed_cleanup_v2', '1')
           }
           const rows = await window.electronAPI.db.getAll()
           setInventory(rows as unknown as InventoryCard[])
         } else {
-          // Fallback for dev without Electron
-          setInventory(SEED_INVENTORY as InventoryCard[])
+          setInventory([])
         }
       } catch (err) {
         console.error('Failed to load data:', err)
-        setInventory(SEED_INVENTORY as InventoryCard[])
+        setInventory([])
       } finally {
         setIsLoading(false)
       }
@@ -53,6 +57,9 @@ export default function App() {
     const unrealizedPL = totalMarketValue - totalCostBasis
     const unrealizedPLPercent = totalCostBasis > 0 ? (unrealizedPL / totalCostBasis) * 100 : 0
     const realizedGains = sold.reduce((sum, c) => sum + (c.sale_price - c.purchase_price) * c.quantity, 0)
+    const soldRevenue = sold.reduce((sum, c) => sum + c.sale_price * c.quantity, 0)
+    const soldMarketValue = sold.reduce((sum, c) => sum + c.market_price * c.quantity, 0)
+    const soldVsMarketPercent = soldMarketValue > 0 ? (soldRevenue / soldMarketValue) * 100 : null
     const totalQuantity = held.reduce((sum, c) => sum + c.quantity, 0)
     const openedCost = opened.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
 
@@ -64,6 +71,7 @@ export default function App() {
       unrealizedPL,
       unrealizedPLPercent,
       realizedGains,
+      soldVsMarketPercent,
       heldCount: held.length,
       soldCount: sold.length,
       openedCount: opened.length,
@@ -159,24 +167,57 @@ export default function App() {
 
   // ─── Toggle sold status ───────────────────────────────────────────
   const handleToggleSold = useCallback(async (card: InventoryCard) => {
-    const newStatus = card.is_sold ? 0 : 1
-    try {
+    if (card.is_sold) {
+      // Un-sell: clear sale info
       if (window.electronAPI) {
-        await window.electronAPI.db.update(card.id, 'is_sold', newStatus)
-        if (newStatus === 0) {
-          await window.electronAPI.db.update(card.id, 'sale_price', 0)
-          await window.electronAPI.db.update(card.id, 'sale_date', '')
-        }
+        window.electronAPI.db.update(card.id, 'is_sold', 0).catch(console.error)
+        window.electronAPI.db.update(card.id, 'sale_price', 0).catch(console.error)
+        window.electronAPI.db.update(card.id, 'sale_date', '').catch(console.error)
       }
       setInventory(prev => prev.map(c =>
-        c.id === card.id
-          ? { ...c, is_sold: newStatus, sale_price: newStatus ? c.sale_price : 0, sale_date: newStatus ? c.sale_date : '' }
-          : c
+        c.id === card.id ? { ...c, is_sold: 0, sale_price: 0, sale_date: '' } : c
       ))
-    } catch (err) {
-      console.error('Failed to toggle sold:', err)
+      return
     }
+    // Marking as sold — open modal to collect qty + price
+    setSellingCard(card)
   }, [])
+
+  const handleConfirmSale = useCallback((qtySold: number, salePrice: number) => {
+    const card = sellingCard
+    if (!card) return
+    const saleDate = new Date().toISOString().split('T')[0]
+
+    if (qtySold >= card.quantity) {
+      if (window.electronAPI) {
+        window.electronAPI.db.update(card.id, 'is_sold', 1).catch(console.error)
+        window.electronAPI.db.update(card.id, 'sale_price', salePrice).catch(console.error)
+        window.electronAPI.db.update(card.id, 'sale_date', saleDate).catch(console.error)
+      }
+      setInventory(prev => prev.map(c =>
+        c.id === card.id ? { ...c, is_sold: 1, sale_price: salePrice, sale_date: saleDate } : c
+      ))
+    } else {
+      const remainingQty = card.quantity - qtySold
+      const soldRow: InventoryCard = {
+        ...card,
+        id: uuidv4(),
+        quantity: qtySold,
+        is_sold: 1,
+        sale_price: salePrice,
+        sale_date: saleDate
+      }
+      if (window.electronAPI) {
+        window.electronAPI.db.update(card.id, 'quantity', remainingQty).catch(console.error)
+        window.electronAPI.db.insert(soldRow as unknown as Record<string, unknown>).catch(console.error)
+      }
+      setInventory(prev => {
+        const updated = prev.map(c => c.id === card.id ? { ...c, quantity: remainingQty } : c)
+        return [soldRow, ...updated]
+      })
+    }
+    setSellingCard(null)
+  }, [sellingCard])
 
   // ─── Refresh prices via JustTCG batch endpoint ───────────────────
   const handleRefreshPrices = useCallback(async () => {
@@ -299,7 +340,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <span className="text-xl">📦</span>
             <span className="text-sm text-surface-900 font-medium">
-              Viewing contents of: <span className="font-bold text-accent">{parentItemName}</span>
+              Viewing contents of: <span className="font-bold text-surface-900">{parentItemName}</span>
             </span>
           </div>
           <button 
@@ -325,6 +366,11 @@ export default function App() {
         onClose={() => setIsSearchOpen(false)}
         onAddCard={handleAddCard}
         sealedItems={inventory.filter(c => c.item_type === 'Sealed')}
+      />
+      <SellModal
+        card={sellingCard}
+        onClose={() => setSellingCard(null)}
+        onConfirm={handleConfirmSale}
       />
     </div>
   )

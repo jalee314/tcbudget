@@ -64,6 +64,7 @@ export interface PortfolioSummary {
   unrealizedPL: number
   unrealizedPLPercent: number
   realizedGains: number
+  soldVsMarketPercent: number | null
   heldCount: number
   soldCount: number
   openedCount: number
