@@ -13,6 +13,7 @@ interface DataGridProps {
   onCellValueChanged: (id: string, field: string, value: unknown) => void
   onDeleteRow: (id: string) => void
   onToggleSold: (card: InventoryCard) => void
+  onToggleOpened: (card: InventoryCard) => void
   onViewContents?: (id: string) => void
 }
 
@@ -83,31 +84,37 @@ function StatusRenderer(props: ICellRendererParams<InventoryCard>) {
   const data = props.data
   if (!data) return null
   const isSold = data.is_sold === 1
+  const isOpened = data.is_opened === 1 && !isSold
 
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider ${
-      isSold ? 'badge-sold' : 'badge-held'
-    }`}>
-      {isSold ? 'Sold' : 'Held'}
-    </span>
-  )
+  if (isSold) {
+    return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider badge-sold">Sold</span>
+  }
+  if (isOpened) {
+    return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider bg-amber-100 text-amber-700">Opened</span>
+  }
+  return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider badge-held">Held</span>
 }
 
 function ActionsRenderer(props: ICellRendererParams<InventoryCard> & {
   onDelete: (id: string) => void
   onToggleSold: (card: InventoryCard) => void
+  onToggleOpened: (card: InventoryCard) => void
   onViewContents?: (id: string) => void
 }) {
   const data = props.data
   if (!data) return null
 
+  const isSealed = data.item_type === 'Sealed'
+  const isOpened = data.is_opened === 1
+
   return (
     <div className="flex items-center gap-1">
-      {data.item_type === 'Sealed' && props.onViewContents && (
+      {/* View contents — show for opened sealed items */}
+      {isSealed && isOpened && props.onViewContents && (
         <button
           onClick={() => props.onViewContents!(data.id)}
           className="p-1.5 rounded-md text-surface-500 hover:text-accent hover:bg-accent/10 transition-all"
-          title="View Contents"
+          title="View Pulled Cards"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
@@ -116,6 +123,25 @@ function ActionsRenderer(props: ICellRendererParams<InventoryCard> & {
           </svg>
         </button>
       )}
+
+      {/* Open/seal toggle — only for sealed items that aren't sold */}
+      {isSealed && !data.is_sold && (
+        <button
+          onClick={() => props.onToggleOpened(data)}
+          className={`p-1.5 rounded-md transition-all ${isOpened ? 'text-amber-500 hover:text-amber-700 hover:bg-amber-50' : 'text-surface-500 hover:text-amber-600 hover:bg-amber-50'}`}
+          title={isOpened ? 'Mark as Sealed' : 'Mark as Opened'}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {isOpened ? (
+              <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></>
+            ) : (
+              <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>
+            )}
+          </svg>
+        </button>
+      )}
+
+      {/* Sold toggle */}
       <button
         onClick={() => props.onToggleSold(data)}
         className="p-1.5 rounded-md text-surface-500 hover:text-surface-900 hover:bg-surface-200 transition-all"
@@ -129,6 +155,8 @@ function ActionsRenderer(props: ICellRendererParams<InventoryCard> & {
           )}
         </svg>
       </button>
+
+      {/* Delete */}
       <button
         onClick={() => props.onDelete(data.id)}
         className="p-1.5 rounded-md text-surface-500 hover:text-loss hover:bg-loss/10 transition-all"
@@ -159,9 +187,16 @@ function currencyFormatter(params: ValueFormatterParams): string {
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
-export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onToggleSold, onViewContents }: DataGridProps) {
+export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onToggleSold, onToggleOpened, onViewContents }: DataGridProps) {
   const gridRef = useRef<AgGridReact>(null)
   const [filterText, setFilterText] = useState('')
+  const [viewFilter, setViewFilter] = useState<'all' | 'cards' | 'sealed'>('all')
+
+  const filteredByType = useMemo(() => {
+    if (viewFilter === 'cards') return rowData.filter(c => c.item_type === 'Card')
+    if (viewFilter === 'sealed') return rowData.filter(c => c.item_type === 'Sealed')
+    return rowData
+  }, [rowData, viewFilter])
 
   const columnDefs = useMemo<ColDef<InventoryCard>[]>(() => [
     {
@@ -292,13 +327,14 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       cellRendererParams: {
         onDelete: onDeleteRow,
         onToggleSold: onToggleSold,
+        onToggleOpened: onToggleOpened,
         onViewContents: onViewContents
       },
       pinned: 'right' as const,
       sortable: false,
       filter: false
     }
-  ], [onDeleteRow, onToggleSold, onViewContents])
+  ], [onDeleteRow, onToggleSold, onToggleOpened, onViewContents])
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
@@ -322,6 +358,21 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
     <div className="flex flex-col h-full">
       {/* Grid Filter Bar */}
       <div className="flex items-center gap-3 px-5 py-3">
+        <div className="flex gap-1 border border-surface-200 rounded-lg p-0.5 bg-surface-50">
+          {(['all', 'cards', 'sealed'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setViewFilter(tab)}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                viewFilter === tab
+                  ? 'bg-white text-surface-900 shadow-sm'
+                  : 'text-surface-500 hover:text-surface-700'
+              }`}
+            >
+              {tab === 'all' ? 'All' : tab === 'cards' ? 'Cards' : 'Sealed'}
+            </button>
+          ))}
+        </div>
         <div className="relative flex-1 max-w-sm">
           <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-500" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
@@ -335,7 +386,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
           />
         </div>
         <span className="text-xs text-surface-500 font-mono">
-          {rowData.length} {rowData.length === 1 ? 'item' : 'items'}
+          {filteredByType.length} {filteredByType.length === 1 ? 'item' : 'items'}
         </span>
       </div>
 
@@ -344,7 +395,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
         <div className="ag-theme-custom-light w-full h-full rounded-xl overflow-hidden glass-card-subtle">
           <AgGridReact<InventoryCard>
             ref={gridRef}
-            rowData={rowData}
+            rowData={filteredByType}
             columnDefs={columnDefs}
             defaultColDef={defaultColDef}
             onCellValueChanged={handleCellValueChanged}

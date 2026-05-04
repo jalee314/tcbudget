@@ -19,6 +19,15 @@ export interface InventoryCard {
   notes: string
   item_type?: 'Card' | 'Sealed' | 'Other'
   parent_id?: string | null
+  is_opened?: number
+  variant_id?: string | null
+}
+
+export interface SearchCardVariant {
+  id: string
+  condition: string
+  printing: string
+  price: number
 }
 
 export interface SearchCard {
@@ -33,6 +42,18 @@ export interface SearchCard {
   market_price: number
   types?: string[]
   supertype?: string
+  variants?: SearchCardVariant[]
+}
+
+export interface SealedProduct {
+  id: string
+  name: string
+  set_name: string
+  set_id: string
+  product_type: 'ETB' | 'Booster Box' | 'Booster Bundle' | 'Build & Battle' | 'Premium Collection' | 'Other'
+  pack_count: number
+  market_price: number
+  image_url: string
 }
 
 export interface PortfolioSummary {
@@ -45,4 +66,6 @@ export interface PortfolioSummary {
   realizedGains: number
   heldCount: number
   soldCount: number
+  openedCount: number
+  openedCost: number
 }

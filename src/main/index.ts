@@ -4,6 +4,20 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Database from 'better-sqlite3'
 import { v4 as uuidv4 } from 'uuid'
 import { writeFileSync } from 'fs'
+import { JustTCG } from 'justtcg-js'
+
+// ─── JustTCG Client ─────────────────────────────────────────────────────────
+let jtcg: JustTCG | null = null
+
+function initJustTCG(): void {
+  const apiKey = process.env.JUSTTCG_API_KEY
+  if (!apiKey) {
+    console.warn('[JustTCG] JUSTTCG_API_KEY not set — price features disabled')
+    return
+  }
+  jtcg = new JustTCG({ apiKey })
+  console.log('[JustTCG] Client initialized')
+}
 
 // ─── Database Setup ─────────────────────────────────────────────────────────
 let db: Database.Database
@@ -36,7 +50,9 @@ function initDatabase(): void {
       sale_date TEXT,
       notes TEXT DEFAULT '',
       item_type TEXT DEFAULT 'Card',
-      parent_id TEXT
+      parent_id TEXT,
+      is_opened INTEGER DEFAULT 0,
+      variant_id TEXT
     )
   `)
 
@@ -48,6 +64,18 @@ function initDatabase(): void {
 
   try {
     db.exec(`ALTER TABLE inventory ADD COLUMN parent_id TEXT`)
+  } catch (err) {
+    // Column might already exist
+  }
+
+  try {
+    db.exec(`ALTER TABLE inventory ADD COLUMN is_opened INTEGER DEFAULT 0`)
+  } catch (err) {
+    // Column might already exist
+  }
+
+  try {
+    db.exec(`ALTER TABLE inventory ADD COLUMN variant_id TEXT`)
   } catch (err) {
     // Column might already exist
   }
@@ -65,8 +93,8 @@ function setupIPC(): void {
   ipcMain.handle('db:insert', (_event, card: Record<string, unknown>) => {
     const id = card.id || uuidv4()
     const stmt = db.prepare(`
-      INSERT INTO inventory (id, card_id, name, set_name, set_id, card_number, rarity, image_url, purchase_price, purchase_date, quantity, condition, market_price, last_updated, is_sold, sale_price, sale_date, notes, item_type, parent_id)
-      VALUES (@id, @card_id, @name, @set_name, @set_id, @card_number, @rarity, @image_url, @purchase_price, @purchase_date, @quantity, @condition, @market_price, @last_updated, @is_sold, @sale_price, @sale_date, @notes, @item_type, @parent_id)
+      INSERT INTO inventory (id, card_id, name, set_name, set_id, card_number, rarity, image_url, purchase_price, purchase_date, quantity, condition, market_price, last_updated, is_sold, sale_price, sale_date, notes, item_type, parent_id, is_opened, variant_id)
+      VALUES (@id, @card_id, @name, @set_name, @set_id, @card_number, @rarity, @image_url, @purchase_price, @purchase_date, @quantity, @condition, @market_price, @last_updated, @is_sold, @sale_price, @sale_date, @notes, @item_type, @parent_id, @is_opened, @variant_id)
     `)
 
     const now = new Date().toISOString()
@@ -90,7 +118,9 @@ function setupIPC(): void {
       sale_date: card.sale_date || '',
       notes: card.notes || '',
       item_type: card.item_type || 'Card',
-      parent_id: card.parent_id || null
+      parent_id: card.parent_id || null,
+      is_opened: card.is_opened || 0,
+      variant_id: card.variant_id || null
     })
 
     return { id, ...card }
@@ -102,7 +132,7 @@ function setupIPC(): void {
     const allowedFields = [
       'purchase_price', 'purchase_date', 'quantity', 'condition',
       'market_price', 'is_sold', 'sale_price', 'sale_date', 'notes',
-      'name', 'set_name', 'last_updated', 'item_type', 'parent_id'
+      'name', 'set_name', 'last_updated', 'item_type', 'parent_id', 'is_opened', 'variant_id'
     ]
 
     if (!allowedFields.includes(field)) {
@@ -148,8 +178,8 @@ function setupIPC(): void {
   // Bulk insert (for seeding mock data)
   ipcMain.handle('db:bulkInsert', (_event, cards: Record<string, unknown>[]) => {
     const stmt = db.prepare(`
-      INSERT OR IGNORE INTO inventory (id, card_id, name, set_name, set_id, card_number, rarity, image_url, purchase_price, purchase_date, quantity, condition, market_price, last_updated, is_sold, sale_price, sale_date, notes, item_type, parent_id)
-      VALUES (@id, @card_id, @name, @set_name, @set_id, @card_number, @rarity, @image_url, @purchase_price, @purchase_date, @quantity, @condition, @market_price, @last_updated, @is_sold, @sale_price, @sale_date, @notes, @item_type, @parent_id)
+      INSERT OR IGNORE INTO inventory (id, card_id, name, set_name, set_id, card_number, rarity, image_url, purchase_price, purchase_date, quantity, condition, market_price, last_updated, is_sold, sale_price, sale_date, notes, item_type, parent_id, is_opened, variant_id)
+      VALUES (@id, @card_id, @name, @set_name, @set_id, @card_number, @rarity, @image_url, @purchase_price, @purchase_date, @quantity, @condition, @market_price, @last_updated, @is_sold, @sale_price, @sale_date, @notes, @item_type, @parent_id, @is_opened, @variant_id)
     `)
 
     const insertMany = db.transaction((items: Record<string, unknown>[]) => {
@@ -175,7 +205,9 @@ function setupIPC(): void {
           sale_date: card.sale_date || '',
           notes: card.notes || '',
           item_type: card.item_type || 'Card',
-          parent_id: card.parent_id || null
+          parent_id: card.parent_id || null,
+          is_opened: card.is_opened || 0,
+          variant_id: card.variant_id || null
         })
       }
     })
@@ -188,6 +220,70 @@ function setupIPC(): void {
   ipcMain.handle('db:getCount', () => {
     const row = db.prepare('SELECT COUNT(*) as count FROM inventory').get() as { count: number }
     return row.count
+  })
+
+  // ─── JustTCG IPC ────────────────────────────────────────────────────────
+
+  // Search cards by name query — returns Card[] from JustTCG
+  ipcMain.handle('justtcg:search', async (_event, query: string) => {
+    if (!jtcg) return { error: 'API key not configured', data: [] }
+    try {
+      const result = await jtcg.v1.cards.search(query, { game: 'Pokemon', limit: 20 })
+      return { data: result.data ?? [], usage: result.usage }
+    } catch (err: any) {
+      console.error('[JustTCG] search error:', err?.message)
+      return { error: err?.message ?? 'Search failed', data: [] }
+    }
+  })
+
+  // Look up a single card by set + number (used when adding from sealed product opening)
+  ipcMain.handle('justtcg:getBySetNumber', async (_event, set: string, number: string) => {
+    if (!jtcg) return { error: 'API key not configured', data: [] }
+    try {
+      const result = await jtcg.v1.cards.get({ game: 'Pokemon', set, number })
+      return { data: result.data ?? [], usage: result.usage }
+    } catch (err: any) {
+      console.error('[JustTCG] getBySetNumber error:', err?.message)
+      return { error: err?.message ?? 'Lookup failed', data: [] }
+    }
+  })
+
+  // Search sealed products — sealed items are cards with condition 'Sealed' in JustTCG
+  ipcMain.handle('justtcg:searchSealed', async (_event, query: string) => {
+    if (!jtcg) return { error: 'API key not configured', data: [] }
+    try {
+      const result = await jtcg.v1.cards.search(query || 'Pokemon', {
+        game: 'Pokemon',
+        limit: 20,
+        condition: ['Sealed'],
+      })
+      return { data: result.data ?? [] }
+    } catch (err: any) {
+      console.error('[JustTCG] searchSealed error:', err?.message)
+      return { error: err?.message ?? 'Search failed', data: [] }
+    }
+  })
+
+  // Batch price refresh — accepts array of variantIds, returns updated Card[]
+  ipcMain.handle('justtcg:batchRefresh', async (_event, variantIds: string[]) => {
+    if (!jtcg || variantIds.length === 0) return { data: [] }
+    try {
+      // Batch in chunks of 100 (Pro/Starter limit)
+      const chunks: string[][] = []
+      for (let i = 0; i < variantIds.length; i += 100) {
+        chunks.push(variantIds.slice(i, i + 100))
+      }
+      const allCards: unknown[] = []
+      for (const chunk of chunks) {
+        const items = chunk.map(id => ({ variantId: id }))
+        const result = await jtcg.v1.cards.getByBatch(items)
+        allCards.push(...(result.data ?? []))
+      }
+      return { data: allCards }
+    } catch (err: any) {
+      console.error('[JustTCG] batchRefresh error:', err?.message)
+      return { error: err?.message ?? 'Batch refresh failed', data: [] }
+    }
   })
 }
 
@@ -238,6 +334,7 @@ app.whenReady().then(() => {
   })
 
   initDatabase()
+  initJustTCG()
   setupIPC()
   createWindow()
 

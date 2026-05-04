@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:justtcg.com)",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/better-sqlite3/package.json'\\).version\\)\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/@types/better-sqlite3/package.json'\\).version\\)\")",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

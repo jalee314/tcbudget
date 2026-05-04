@@ -10,6 +10,12 @@ export interface ElectronAPI {
     bulkInsert: (cards: Record<string, unknown>[]) => Promise<{ success: boolean; count: number }>
     getCount: () => Promise<number>
   }
+  justtcg: {
+    search: (query: string) => Promise<{ data: unknown[]; usage?: unknown; error?: string }>
+    searchSealed: (query: string) => Promise<{ data: unknown[]; error?: string }>
+    getBySetNumber: (set: string, number: string) => Promise<{ data: unknown[]; usage?: unknown; error?: string }>
+    batchRefresh: (variantIds: string[]) => Promise<{ data: unknown[]; error?: string }>
+  }
 }
 
 const api: ElectronAPI = {
@@ -21,6 +27,12 @@ const api: ElectronAPI = {
     exportCsv: () => ipcRenderer.invoke('db:exportCsv'),
     bulkInsert: (cards) => ipcRenderer.invoke('db:bulkInsert', cards),
     getCount: () => ipcRenderer.invoke('db:getCount')
+  },
+  justtcg: {
+    search: (query) => ipcRenderer.invoke('justtcg:search', query),
+    searchSealed: (query) => ipcRenderer.invoke('justtcg:searchSealed', query),
+    getBySetNumber: (set, number) => ipcRenderer.invoke('justtcg:getBySetNumber', set, number),
+    batchRefresh: (variantIds) => ipcRenderer.invoke('justtcg:batchRefresh', variantIds)
   }
 }
 

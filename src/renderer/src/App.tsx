@@ -41,15 +41,20 @@ export default function App() {
 
   // ─── Portfolio summary ─────────────────────────────────────────────
   const summary = useMemo<PortfolioSummary>(() => {
-    const held = inventory.filter(c => !c.is_sold)
+    const held = inventory.filter(c => !c.is_sold && !c.is_opened)
+    const opened = inventory.filter(c => c.is_opened === 1 && !c.is_sold)
     const sold = inventory.filter(c => c.is_sold === 1)
 
-    const totalCostBasis = held.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
+    const totalCostBasis =
+      held.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0) +
+      opened.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
+    // Opened sealed items have no resale value as sealed product — treated as $0 market value
     const totalMarketValue = held.reduce((sum, c) => sum + c.market_price * c.quantity, 0)
     const unrealizedPL = totalMarketValue - totalCostBasis
     const unrealizedPLPercent = totalCostBasis > 0 ? (unrealizedPL / totalCostBasis) * 100 : 0
     const realizedGains = sold.reduce((sum, c) => sum + (c.sale_price - c.purchase_price) * c.quantity, 0)
     const totalQuantity = held.reduce((sum, c) => sum + c.quantity, 0)
+    const openedCost = opened.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
 
     return {
       totalCards: held.length,
@@ -60,7 +65,9 @@ export default function App() {
       unrealizedPLPercent,
       realizedGains,
       heldCount: held.length,
-      soldCount: sold.length
+      soldCount: sold.length,
+      openedCount: opened.length,
+      openedCost
     }
   }, [inventory])
 
@@ -85,7 +92,8 @@ export default function App() {
     quantity: number,
     condition: string,
     itemType: 'Card' | 'Sealed' | 'Other' = 'Card',
-    parentId: string | null = null
+    parentId: string | null = null,
+    variantId: string | null = null
   ) => {
     const now = new Date().toISOString()
     const newCard: InventoryCard = {
@@ -108,7 +116,8 @@ export default function App() {
       sale_date: '',
       notes: '',
       item_type: itemType,
-      parent_id: parentId
+      parent_id: parentId,
+      variant_id: variantId
     }
 
     try {
@@ -133,6 +142,21 @@ export default function App() {
     }
   }, [])
 
+  // ─── Toggle opened status (sealed items only) ────────────────────
+  const handleToggleOpened = useCallback(async (card: InventoryCard) => {
+    const newStatus = card.is_opened ? 0 : 1
+    try {
+      if (window.electronAPI) {
+        await window.electronAPI.db.update(card.id, 'is_opened', newStatus)
+      }
+      setInventory(prev => prev.map(c =>
+        c.id === card.id ? { ...c, is_opened: newStatus } : c
+      ))
+    } catch (err) {
+      console.error('Failed to toggle opened:', err)
+    }
+  }, [])
+
   // ─── Toggle sold status ───────────────────────────────────────────
   const handleToggleSold = useCallback(async (card: InventoryCard) => {
     const newStatus = card.is_sold ? 0 : 1
@@ -154,14 +178,52 @@ export default function App() {
     }
   }, [])
 
-  // ─── Refresh prices (mock) ────────────────────────────────────────
+  // ─── Refresh prices via JustTCG batch endpoint ───────────────────
   const handleRefreshPrices = useCallback(async () => {
     setIsRefreshing(true)
-    // Simulate API call delay
-    await new Promise(r => setTimeout(r, 1500))
-    // In real implementation, this would call the pokemontcg.io API
-    setIsRefreshing(false)
-  }, [])
+    try {
+      const toRefresh = inventory.filter(c => !c.is_sold && c.variant_id)
+      if (toRefresh.length === 0) return
+
+      const variantIds = toRefresh.map(c => c.variant_id as string)
+      const result = await window.electronAPI.justtcg.batchRefresh(variantIds)
+
+      if (result.error) {
+        console.error('Price refresh error:', result.error)
+        return
+      }
+
+      // Build variantId → price map from returned cards
+      const priceMap = new Map<string, number>()
+      for (const raw of result.data as any[]) {
+        for (const v of raw.variants ?? []) {
+          if (v.id && v.price != null) priceMap.set(v.id, v.price)
+        }
+      }
+
+      // Update each card that has a new price
+      const now = new Date().toISOString()
+      for (const card of toRefresh) {
+        const newPrice = priceMap.get(card.variant_id as string)
+        if (newPrice != null && newPrice !== card.market_price) {
+          if (window.electronAPI) {
+            await window.electronAPI.db.update(card.id, 'market_price', newPrice)
+            await window.electronAPI.db.update(card.id, 'last_updated', now)
+          }
+        }
+      }
+
+      // Reload inventory to reflect updated prices
+      if (window.electronAPI) {
+        const rows = await window.electronAPI.db.getAll()
+        setInventory(rows as unknown as InventoryCard[])
+      }
+    } catch (err) {
+      console.error('Failed to refresh prices:', err)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [inventory])
 
   // ─── Export CSV ───────────────────────────────────────────────────
   const handleExportCsv = useCallback(async () => {
@@ -254,6 +316,7 @@ export default function App() {
           onCellValueChanged={handleCellValueChanged}
           onDeleteRow={handleDeleteRow}
           onToggleSold={handleToggleSold}
+          onToggleOpened={handleToggleOpened}
           onViewContents={setActiveParentFilter}
         />
       </div>
