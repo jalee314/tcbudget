@@ -14,6 +14,7 @@ type GridRow = InventoryCard & {
   __groupKey?: string
   __lotCount?: number
   __expanded?: boolean
+  __sortIndex?: number
 }
 
 interface DataGridProps {
@@ -261,6 +262,14 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
     return rowData
   }, [rowData, viewFilter])
 
+  const rowOrder = useMemo(() => {
+    const order = new Map<string, number>()
+    filteredByType.forEach((card, index) => {
+      order.set(card.id, index)
+    })
+    return order
+  }, [filteredByType])
+
   // Build grid rows with lot grouping for held items that share a card_id but differ in purchase_price.
   const gridRows = useMemo<GridRow[]>(() => {
     const groupable: InventoryCard[] = []
@@ -280,6 +289,10 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
 
     const out: GridRow[] = []
     for (const [key, lots] of buckets) {
+      const sourceIndexes = lots
+        .map(lot => rowOrder.get(lot.id) ?? Number.MAX_SAFE_INTEGER)
+        .filter(index => index !== Number.MAX_SAFE_INTEGER)
+      const sortIndex = sourceIndexes.length > 0 ? Math.min(...sourceIndexes) : Number.MAX_SAFE_INTEGER
       const distinctPrices = new Set(lots.map(l => l.purchase_price))
       if (lots.length >= 2 && distinctPrices.size >= 2) {
         const totalQty = lots.reduce((s, l) => s + l.quantity, 0)
@@ -300,19 +313,38 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
           __isGroup: true,
           __groupKey: key,
           __lotCount: lots.length,
-          __expanded: isExpanded
+          __expanded: isExpanded,
+          __sortIndex: sortIndex
         }
         out.push(groupRow)
         if (isExpanded) {
-          for (const lot of lots) out.push({ ...lot, __inGroup: true, __groupKey: key })
+          for (const lot of lots) {
+            out.push({
+              ...lot,
+              __inGroup: true,
+              __groupKey: key,
+              __sortIndex: rowOrder.get(lot.id) ?? Number.MAX_SAFE_INTEGER
+            })
+          }
         }
       } else {
-        for (const lot of lots) out.push(lot)
+        for (const lot of lots) {
+          out.push({
+            ...lot,
+            __sortIndex: rowOrder.get(lot.id) ?? Number.MAX_SAFE_INTEGER
+          })
+        }
       }
     }
-    for (const u of ungrouped) out.push(u)
+    for (const u of ungrouped) {
+      out.push({
+        ...u,
+        __sortIndex: rowOrder.get(u.id) ?? Number.MAX_SAFE_INTEGER
+      })
+    }
+    out.sort((a, b) => (a.__sortIndex ?? Number.MAX_SAFE_INTEGER) - (b.__sortIndex ?? Number.MAX_SAFE_INTEGER))
     return out
-  }, [filteredByType, expandedGroups])
+  }, [filteredByType, expandedGroups, rowOrder])
 
   const columnDefs = useMemo<ColDef<GridRow>[]>(() => [
     {
@@ -372,6 +404,18 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       cellClass: 'font-mono text-surface-900 font-medium'
     },
     {
+      headerName: 'Total Market Price',
+      colId: 'total_market_price',
+      width: 150,
+      valueGetter: (params) => {
+        const d = params.data
+        if (!d || d.__isGroup || !d.quantity) return null
+        return d.market_price * d.quantity
+      },
+      valueFormatter: (params) => params.value == null ? '—' : currencyFormatter(params),
+      cellClass: (params) => params.value == null ? 'text-surface-400 font-mono' : 'font-mono text-surface-900'
+    },
+    {
       headerName: 'Cost Basis',
       valueGetter: (params) => {
         if (!params.data) return 0
@@ -419,9 +463,9 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       }
     },
     {
-      headerName: 'Sale Price',
+      headerName: 'Total Sale Price',
       field: 'sale_price',
-      width: 110,
+      width: 140,
       editable: (params) => params.data?.is_sold === 1,
       cellDataType: 'number',
       valueFormatter: (params) => {
@@ -434,13 +478,26 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       }
     },
     {
+      headerName: 'Unit Sale Price',
+      colId: 'unit_sale_price',
+      width: 130,
+      valueGetter: (params) => {
+        const d = params.data
+        if (!d || d.__isGroup || !d.is_sold || !d.quantity) return null
+        return d.sale_price / d.quantity
+      },
+      valueFormatter: (params) => params.value == null ? '—' : currencyFormatter(params),
+      cellClass: (params) => params.value == null ? 'text-surface-400 font-mono' : 'font-mono text-surface-900'
+    },
+    {
       headerName: '% of Market',
       colId: 'sold_vs_market',
       width: 120,
       valueGetter: (params) => {
         const d = params.data
-        if (!d || d.__isGroup || !d.is_sold || !d.market_price) return null
-        return (d.sale_price / d.market_price) * 100
+        if (!d || d.__isGroup || !d.is_sold || !d.market_price || !d.quantity) return null
+        const unitSalePrice = d.sale_price / d.quantity
+        return (unitSalePrice / d.market_price) * 100
       },
       valueFormatter: (params) => params.value == null ? '—' : `${(params.value as number).toFixed(1)}%`,
       cellClass: (params) => {

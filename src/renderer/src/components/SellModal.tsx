@@ -38,8 +38,8 @@ export default function SellModal({ card, onClose, onConfirm }: SellModalProps) 
       setError('Enter a valid sale price')
       return
     }
-    const perUnit = priceMode === 'total' ? raw / q : raw
-    onConfirm(q, perUnit)
+    const totalSalePrice = priceMode === 'total' ? raw : raw * q
+    onConfirm(q, totalSalePrice)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

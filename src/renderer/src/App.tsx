@@ -56,8 +56,10 @@ export default function App() {
     const totalMarketValue = held.reduce((sum, c) => sum + c.market_price * c.quantity, 0)
     const unrealizedPL = totalMarketValue - totalCostBasis
     const unrealizedPLPercent = totalCostBasis > 0 ? (unrealizedPL / totalCostBasis) * 100 : 0
-    const realizedGains = sold.reduce((sum, c) => sum + (c.sale_price - c.purchase_price) * c.quantity, 0)
-    const soldRevenue = sold.reduce((sum, c) => sum + c.sale_price * c.quantity, 0)
+    const realizedGains =
+      sold.reduce((sum, c) => sum + c.sale_price - (c.purchase_price * c.quantity), 0) -
+      opened.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
+    const soldRevenue = sold.reduce((sum, c) => sum + c.sale_price, 0)
     const soldMarketValue = sold.reduce((sum, c) => sum + c.market_price * c.quantity, 0)
     const soldVsMarketPercent = soldMarketValue > 0 ? (soldRevenue / soldMarketValue) * 100 : null
     const totalQuantity = held.reduce((sum, c) => sum + c.quantity, 0)
