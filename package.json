@@ -7,6 +7,8 @@
     "start": "electron-vite dev",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -34,5 +36,22 @@
     "react-dom": "^18.3.1",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2"
+  }
+  ,
+  "build": {
+    "appId": "com.yourcompany.tcbudget",
+    "productName": "TCBudget",
+    "files": [
+      "out/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "directories": { "buildResources": "build" },
+    "win": { "target": ["nsis"] },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

@@ -5,9 +5,24 @@ import Database from 'better-sqlite3'
 import { v4 as uuidv4 } from 'uuid'
 import { writeFileSync } from 'fs'
 import { JustTCG } from 'justtcg-js'
+import { TTLCache } from './cache'
 
 // ─── JustTCG Client ─────────────────────────────────────────────────────────
 let jtcg: JustTCG | null = null
+
+// ─── API Caches ─────────────────────────────────────────────────────────────
+const cardSearchCache = new TTLCache<unknown>()
+const sealedSearchCache = new TTLCache<unknown>()
+const setNumberCache = new TTLCache<unknown>()
+const batchRefreshCache = new TTLCache<unknown>()
+
+const SEARCH_TTL_MS = 30 * 60 * 1000 // 30 min
+const SET_NUMBER_TTL_MS = 24 * 60 * 60 * 1000 // 24 h
+const BATCH_TTL_MS = 5 * 60 * 1000 // 5 min
+
+function batchCacheKey(variantIds: string[]): string {
+  return Array.from(new Set(variantIds)).sort().join('|')
+}
 
 function initJustTCG(): void {
   const apiKey = process.env.JUSTTCG_API_KEY
@@ -227,9 +242,21 @@ function setupIPC(): void {
   // Search cards by name query — returns Card[] from JustTCG
   ipcMain.handle('justtcg:search', async (_event, query: string) => {
     if (!jtcg) return { error: 'API key not configured', data: [] }
+
+    const normalized = query.trim().toLowerCase().replace(/\s+/g, ' ')
+
+    const cached = cardSearchCache.get(normalized)
+    if (cached) {
+      console.log(`[Cache HIT] Card search: "${normalized}"`)
+      return cached
+    }
+
     try {
       const result = await jtcg.v1.cards.search(query, { game: 'Pokemon', limit: 20 })
-      return { data: result.data ?? [], usage: result.usage }
+      const response = { data: result.data ?? [], usage: result.usage }
+      cardSearchCache.set(normalized, response, SEARCH_TTL_MS)
+      console.log(`[Cache MISS] Card search: "${normalized}" — cached for 30min`)
+      return response
     } catch (err: any) {
       console.error('[JustTCG] search error:', err?.message)
       return { error: err?.message ?? 'Search failed', data: [] }
@@ -239,9 +266,21 @@ function setupIPC(): void {
   // Look up a single card by set + number (used when adding from sealed product opening)
   ipcMain.handle('justtcg:getBySetNumber', async (_event, set: string, number: string) => {
     if (!jtcg) return { error: 'API key not configured', data: [] }
+
+    const cacheKey = `${set.toLowerCase()}:${number.toLowerCase()}`
+
+    const cached = setNumberCache.get(cacheKey)
+    if (cached) {
+      console.log(`[Cache HIT] Set/number lookup: ${cacheKey}`)
+      return cached
+    }
+
     try {
       const result = await jtcg.v1.cards.get({ game: 'Pokemon', set, number })
-      return { data: result.data ?? [], usage: result.usage }
+      const response = { data: result.data ?? [], usage: result.usage }
+      setNumberCache.set(cacheKey, response, SET_NUMBER_TTL_MS)
+      console.log(`[Cache MISS] Set/number lookup: ${cacheKey} — cached for 24h`)
+      return response
     } catch (err: any) {
       console.error('[JustTCG] getBySetNumber error:', err?.message)
       return { error: err?.message ?? 'Lookup failed', data: [] }
@@ -251,13 +290,30 @@ function setupIPC(): void {
   // Search sealed products — sealed items are cards with condition 'Sealed' in JustTCG
   ipcMain.handle('justtcg:searchSealed', async (_event, query: string) => {
     if (!jtcg) return { error: 'API key not configured', data: [] }
+
+    const normalized = query.trim().toLowerCase().replace(/\s+/g, ' ')
+
+    if (!normalized) {
+      console.log('[Skip] Sealed search: empty query')
+      return { data: [] }
+    }
+
+    const cached = sealedSearchCache.get(normalized)
+    if (cached) {
+      console.log(`[Cache HIT] Sealed search: "${normalized}"`)
+      return cached
+    }
+
     try {
-      const result = await jtcg.v1.cards.search(query || 'Pokemon', {
+      const result = await jtcg.v1.cards.search(query, {
         game: 'Pokemon',
         limit: 20,
         condition: ['Sealed'],
       })
-      return { data: result.data ?? [] }
+      const response = { data: result.data ?? [] }
+      sealedSearchCache.set(normalized, response, SEARCH_TTL_MS)
+      console.log(`[Cache MISS] Sealed search: "${normalized}" — cached for 30min`)
+      return response
     } catch (err: any) {
       console.error('[JustTCG] searchSealed error:', err?.message)
       return { error: err?.message ?? 'Search failed', data: [] }
@@ -267,6 +323,15 @@ function setupIPC(): void {
   // Batch price refresh — accepts array of variantIds, returns updated Card[]
   ipcMain.handle('justtcg:batchRefresh', async (_event, variantIds: string[]) => {
     if (!jtcg || variantIds.length === 0) return { data: [] }
+
+    const cacheKey = batchCacheKey(variantIds)
+
+    const cached = batchRefreshCache.get(cacheKey)
+    if (cached) {
+      console.log(`[Cache HIT] Batch refresh: ${variantIds.length} variants`)
+      return cached
+    }
+
     try {
       // Batch in chunks of 100 (Pro/Starter limit)
       const chunks: string[][] = []
@@ -279,7 +344,10 @@ function setupIPC(): void {
         const result = await jtcg.v1.cards.getByBatch(items)
         allCards.push(...(result.data ?? []))
       }
-      return { data: allCards }
+      const response = { data: allCards }
+      batchRefreshCache.set(cacheKey, response, BATCH_TTL_MS)
+      console.log(`[Cache MISS] Batch refresh: ${variantIds.length} variants — cached for 5min`)
+      return response
     } catch (err: any) {
       console.error('[JustTCG] batchRefresh error:', err?.message)
       return { error: err?.message ?? 'Batch refresh failed', data: [] }

@@ -1,12 +1,25 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react'
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { AgGridReact } from 'ag-grid-react'
 import {
   ColDef,
   CellValueChangedEvent,
   ICellRendererParams,
-  ValueFormatterParams
+  GridReadyEvent
 } from 'ag-grid-community'
 import { InventoryCard } from '../types'
+
+const TOGGLEABLE_COLUMNS: { colId: string; label: string }[] = [
+  { colId: 'rarity', label: 'Rarity' },
+  { colId: 'condition', label: 'Condition' },
+  { colId: 'quantity', label: 'Qty' },
+  { colId: 'purchase_price', label: 'Purchase' },
+  { colId: 'market_price', label: 'Market' },
+  { colId: 'unrealized_pl', label: 'P&L' },
+  { colId: 'status', label: 'Status' },
+  { colId: 'sale_price', label: 'Sale' },
+  { colId: 'purchase_date', label: 'Date' },
+  { colId: 'notes', label: 'Notes' }
+]
 
 type GridRow = InventoryCard & {
   __isGroup?: boolean
@@ -96,36 +109,86 @@ function CardNameRenderer(props: ICellRendererParams<GridRow> & { onToggleGroup?
   )
 }
 
+function MarketRenderer(props: ICellRendererParams<GridRow>) {
+  const data = props.data
+  if (!data) return null
+  const unit = data.market_price
+  const total = unit * data.quantity
+  return (
+    <div className="flex items-baseline gap-1.5 font-mono">
+      <span className="text-surface-900 font-medium text-sm">{formatCurrency(unit)}</span>
+      {data.quantity > 1 && (
+        <span className="text-surface-400 text-xs">({formatCurrency(total)})</span>
+      )}
+    </div>
+  )
+}
+
+function PurchaseRenderer(props: ICellRendererParams<GridRow>) {
+  const data = props.data
+  if (!data) return null
+  const isGroup = !!data.__isGroup
+  const unit = data.purchase_price
+  const total = unit * data.quantity
+  return (
+    <div className="flex items-baseline gap-1.5 font-mono">
+      <span className={`text-sm ${isGroup ? 'text-surface-500 italic' : 'text-surface-700'}`}>
+        {isGroup ? '~' : ''}{formatCurrency(unit)}
+      </span>
+      {data.quantity > 1 && (
+        <span className="text-surface-400 text-xs">({formatCurrency(total)})</span>
+      )}
+    </div>
+  )
+}
+
 function PLRenderer(props: ICellRendererParams<GridRow>) {
   const data = props.data
   if (!data) return null
 
   const pl = (data.market_price - data.purchase_price) * data.quantity
   const isPositive = pl >= 0
+  const hasReturn = data.purchase_price > 0
+  const ret = hasReturn ? ((data.market_price - data.purchase_price) / data.purchase_price) * 100 : 0
 
   return (
-    <span className={`font-mono text-sm font-medium ${isPositive ? 'text-gain' : 'text-loss'}`}>
-      {isPositive ? '+' : ''}{formatCurrency(pl)}
-    </span>
+    <div className="flex items-baseline gap-1.5 font-mono">
+      <span className={`text-sm font-medium ${isPositive ? 'text-gain' : 'text-loss'}`}>
+        {isPositive ? '+' : ''}{formatCurrency(pl)}
+      </span>
+      {hasReturn && (
+        <span className="text-surface-400 text-xs">
+          ({isPositive ? '▲' : '▼'} {Math.abs(ret).toFixed(1)}%)
+        </span>
+      )}
+    </div>
   )
 }
 
-function ReturnRenderer(props: ICellRendererParams<GridRow>) {
+function SaleRenderer(props: ICellRendererParams<GridRow>) {
   const data = props.data
-  if (!data || data.purchase_price === 0) return <span className="text-surface-400">—</span>
+  if (!data || data.__isGroup || !data.is_sold || data.sale_price === 0) {
+    return <span className="text-surface-400">—</span>
+  }
+  const total = data.sale_price
+  const unit = data.quantity > 0 ? total / data.quantity : 0
+  const pctOfMarket = data.market_price > 0 ? (unit / data.market_price) * 100 : null
+  const pctClass = pctOfMarket == null
+    ? ''
+    : pctOfMarket >= 80 ? 'text-gain' : 'text-loss'
 
-  const ret = ((data.market_price - data.purchase_price) / data.purchase_price) * 100
-  const isPositive = ret >= 0
+  const parts: string[] = []
+  if (data.quantity > 1) parts.push(formatCurrency(unit))
+  if (pctOfMarket != null) parts.push(`${pctOfMarket.toFixed(0)}%`)
 
   return (
-    <div className="flex items-center gap-1.5">
-      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold font-mono ${
-        isPositive
-          ? 'bg-gain-bg text-gain-light'
-          : 'bg-loss-bg text-loss-light'
-      }`}>
-        {isPositive ? '▲' : '▼'} {Math.abs(ret).toFixed(1)}%
-      </span>
+    <div className="flex items-baseline gap-1.5 font-mono">
+      <span className="text-surface-900 font-medium text-sm">{formatCurrency(total)}</span>
+      {parts.length > 0 && (
+        <span className={`text-xs ${pctClass || 'text-surface-400'}`}>
+          ({parts.join(' · ')})
+        </span>
+      )}
     </div>
   )
 }
@@ -234,10 +297,6 @@ function formatCurrency(val: number): string {
   }).format(val)
 }
 
-function currencyFormatter(params: ValueFormatterParams): string {
-  if (params.value == null || params.value === '') return ''
-  return formatCurrency(Number(params.value))
-}
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
@@ -246,6 +305,33 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
   const [filterText, setFilterText] = useState('')
   const [viewFilter, setViewFilter] = useState<'all' | 'cards' | 'sealed'>('all')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set())
+  const [showColumnMenu, setShowColumnMenu] = useState(false)
+  const columnMenuRef = useRef<HTMLDivElement>(null)
+
+  const toggleColumn = useCallback((colId: string) => {
+    setHiddenColumns(prev => {
+      const next = new Set(prev)
+      if (next.has(colId)) next.delete(colId)
+      else next.add(colId)
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!showColumnMenu) return
+    const handler = (e: MouseEvent) => {
+      if (columnMenuRef.current && !columnMenuRef.current.contains(e.target as Node)) {
+        setShowColumnMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showColumnMenu])
+
+  useEffect(() => {
+    gridRef.current?.api?.sizeColumnsToFit()
+  }, [hiddenColumns])
 
   const toggleGroup = useCallback((key: string) => {
     setExpandedGroups(prev => {
@@ -349,26 +435,33 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
   const columnDefs = useMemo<ColDef<GridRow>[]>(() => [
     {
       headerName: 'Item',
+      colId: 'name',
       field: 'name',
       cellRenderer: CardNameRenderer,
       cellRendererParams: { onToggleGroup: toggleGroup },
-      minWidth: 260,
-      flex: 2,
-      filter: 'agTextColumnFilter',
+      width: 220,
+      minWidth: 160,
+      filter: false,
       pinned: 'left' as const,
       tooltipValueGetter: (params) => params.data?.name ?? ''
     },
     {
       headerName: 'Rarity',
+      colId: 'rarity',
       field: 'rarity',
-      width: 140,
-      filter: 'agTextColumnFilter',
+      width: 95,
+      minWidth: 75,
+      filter: false,
+      hide: hiddenColumns.has('rarity'),
       cellClass: 'text-surface-500 text-xs'
     },
     {
       headerName: 'Condition',
+      colId: 'condition',
       field: 'condition',
-      width: 120,
+      width: 105,
+      minWidth: 85,
+      hide: hiddenColumns.has('condition'),
       editable: (params) => !params.data?.__isGroup,
       cellEditor: 'agSelectCellEditor',
       cellEditorParams: {
@@ -378,58 +471,53 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
     },
     {
       headerName: 'Qty',
+      colId: 'quantity',
       field: 'quantity',
-      width: 80,
+      width: 65,
+      minWidth: 55,
+      hide: hiddenColumns.has('quantity'),
       editable: (params) => !params.data?.__isGroup,
       cellDataType: 'number',
       cellClass: 'text-center font-mono'
     },
     {
       headerName: 'Purchase',
+      colId: 'purchase_price',
       field: 'purchase_price',
-      width: 120,
+      width: 130,
+      minWidth: 110,
+      hide: hiddenColumns.has('purchase_price'),
       editable: (params) => !params.data?.__isGroup,
       cellDataType: 'number',
-      valueFormatter: (params) => {
-        if (params.data?.__isGroup) return `~${currencyFormatter(params)}`
-        return currencyFormatter(params)
-      },
-      cellClass: (params) => params.data?.__isGroup ? 'font-mono text-surface-500 italic' : 'font-mono text-surface-700'
+      cellRenderer: PurchaseRenderer,
+      tooltipValueGetter: (params) => {
+        const d = params.data
+        if (!d) return ''
+        return `Unit ${formatCurrency(d.purchase_price)} · Cost basis ${formatCurrency(d.purchase_price * d.quantity)}`
+      }
     },
     {
       headerName: 'Market',
+      colId: 'market_price',
       field: 'market_price',
-      width: 120,
-      valueFormatter: currencyFormatter,
-      cellClass: 'font-mono text-surface-900 font-medium'
-    },
-    {
-      headerName: 'Total Market Price',
-      colId: 'total_market_price',
-      width: 150,
-      valueGetter: (params) => {
+      width: 130,
+      minWidth: 110,
+      hide: hiddenColumns.has('market_price'),
+      cellRenderer: MarketRenderer,
+      tooltipValueGetter: (params) => {
         const d = params.data
-        if (!d || d.__isGroup || !d.quantity) return null
-        return d.market_price * d.quantity
-      },
-      valueFormatter: (params) => params.value == null ? '—' : currencyFormatter(params),
-      cellClass: (params) => params.value == null ? 'text-surface-400 font-mono' : 'font-mono text-surface-900'
+        if (!d) return ''
+        return `Unit ${formatCurrency(d.market_price)} · Total ${formatCurrency(d.market_price * d.quantity)}`
+      }
     },
     {
-      headerName: 'Cost Basis',
-      valueGetter: (params) => {
-        if (!params.data) return 0
-        return params.data.purchase_price * params.data.quantity
-      },
-      valueFormatter: currencyFormatter,
-      width: 120,
-      cellClass: 'font-mono text-surface-500'
-    },
-    {
-      headerName: 'Unrealized P&L',
+      headerName: 'P&L',
+      colId: 'unrealized_pl',
       cellRenderer: PLRenderer,
-      width: 140,
-      comparator: (valueA, valueB, nodeA, nodeB) => {
+      width: 145,
+      minWidth: 120,
+      hide: hiddenColumns.has('unrealized_pl'),
+      comparator: (_a, _b, nodeA, nodeB) => {
         const plA = nodeA.data ? (nodeA.data.market_price - nodeA.data.purchase_price) * nodeA.data.quantity : 0
         const plB = nodeB.data ? (nodeB.data.market_price - nodeB.data.purchase_price) * nodeB.data.quantity : 0
         return plA - plB
@@ -437,21 +525,12 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       sortable: true
     },
     {
-      headerName: 'Return',
-      cellRenderer: ReturnRenderer,
-      width: 110,
-      comparator: (valueA, valueB, nodeA, nodeB) => {
-        const retA = nodeA.data && nodeA.data.purchase_price > 0 ? (nodeA.data.market_price - nodeA.data.purchase_price) / nodeA.data.purchase_price : 0
-        const retB = nodeB.data && nodeB.data.purchase_price > 0 ? (nodeB.data.market_price - nodeB.data.purchase_price) / nodeB.data.purchase_price : 0
-        return retA - retB
-      },
-      sortable: true
-    },
-    {
       headerName: 'Status',
       colId: 'status',
       cellRenderer: StatusRenderer,
-      width: 100,
+      width: 85,
+      minWidth: 75,
+      hide: hiddenColumns.has('status'),
       filter: false,
       sortable: true,
       valueGetter: (params) => {
@@ -463,60 +542,40 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       }
     },
     {
-      headerName: 'Total Sale Price',
+      headerName: 'Sale',
+      colId: 'sale_price',
       field: 'sale_price',
-      width: 140,
+      width: 160,
+      minWidth: 130,
+      hide: hiddenColumns.has('sale_price'),
       editable: (params) => params.data?.is_sold === 1,
       cellDataType: 'number',
-      valueFormatter: (params) => {
-        if (!params.data?.is_sold || params.value === 0) return '—'
-        return currencyFormatter(params)
-      },
-      cellClass: (params) => {
-        if (!params.data?.is_sold) return 'text-surface-400'
-        return 'font-mono text-surface-900'
-      }
-    },
-    {
-      headerName: 'Unit Sale Price',
-      colId: 'unit_sale_price',
-      width: 130,
-      valueGetter: (params) => {
+      cellRenderer: SaleRenderer,
+      tooltipValueGetter: (params) => {
         const d = params.data
-        if (!d || d.__isGroup || !d.is_sold || !d.quantity) return null
-        return d.sale_price / d.quantity
-      },
-      valueFormatter: (params) => params.value == null ? '—' : currencyFormatter(params),
-      cellClass: (params) => params.value == null ? 'text-surface-400 font-mono' : 'font-mono text-surface-900'
-    },
-    {
-      headerName: '% of Market',
-      colId: 'sold_vs_market',
-      width: 120,
-      valueGetter: (params) => {
-        const d = params.data
-        if (!d || d.__isGroup || !d.is_sold || !d.market_price || !d.quantity) return null
-        const unitSalePrice = d.sale_price / d.quantity
-        return (unitSalePrice / d.market_price) * 100
-      },
-      valueFormatter: (params) => params.value == null ? '—' : `${(params.value as number).toFixed(1)}%`,
-      cellClass: (params) => {
-        if (params.value == null) return 'text-surface-400 font-mono text-xs'
-        return (params.value as number) >= 80 ? 'font-mono text-xs text-gain' : 'font-mono text-xs text-loss'
+        if (!d || !d.is_sold) return ''
+        const unit = d.quantity > 0 ? d.sale_price / d.quantity : 0
+        const pct = d.market_price > 0 ? (unit / d.market_price) * 100 : null
+        return `Total ${formatCurrency(d.sale_price)} · Unit ${formatCurrency(unit)}${pct != null ? ` · ${pct.toFixed(1)}% of market` : ''}`
       }
     },
     {
       headerName: 'Date',
+      colId: 'purchase_date',
       field: 'purchase_date',
-      width: 110,
+      width: 100,
+      minWidth: 90,
+      hide: hiddenColumns.has('purchase_date'),
       editable: (params) => !params.data?.__isGroup,
       cellClass: 'text-surface-500 text-xs font-mono'
     },
     {
       headerName: 'Notes',
+      colId: 'notes',
       field: 'notes',
-      minWidth: 140,
-      flex: 1,
+      width: 130,
+      minWidth: 90,
+      hide: hiddenColumns.has('notes'),
       editable: (params) => !params.data?.__isGroup,
       cellClass: 'text-surface-500 text-xs'
     },
@@ -524,7 +583,8 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       headerName: '',
       colId: 'actions',
       valueGetter: (params) => params.data ? `${params.data.is_sold}|${params.data.is_opened}` : '',
-      width: 140,
+      width: 110,
+      minWidth: 110,
       cellRenderer: ActionsRenderer,
       cellRendererParams: {
         onDelete: onDeleteRow,
@@ -536,7 +596,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       sortable: false,
       filter: false
     }
-  ], [onDeleteRow, onToggleSold, onToggleOpened, onViewContents, toggleGroup])
+  ], [onDeleteRow, onToggleSold, onToggleOpened, onViewContents, toggleGroup, hiddenColumns])
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
@@ -548,12 +608,24 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
   const handleCellValueChanged = useCallback((event: CellValueChangedEvent<GridRow>) => {
     if (event.data && !event.data.__isGroup && event.colDef.field) {
       onCellValueChanged(event.data.id, event.colDef.field, event.newValue)
+      // Other cells in this row (Market total, Cost basis in Purchase, P&L, Sale)
+      // depend on the edited value — force them to recompute now instead of waiting
+      // for the parent's state round-trip.
+      event.api.refreshCells({ rowNodes: [event.node], force: true })
     }
   }, [onCellValueChanged])
 
   const onFilterTextChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setFilterText(e.target.value)
     gridRef.current?.api?.setGridOption('quickFilterText', e.target.value)
+  }, [])
+
+  const handleGridReady = useCallback((event: GridReadyEvent) => {
+    event.api.sizeColumnsToFit()
+  }, [])
+
+  const handleGridSizeChanged = useCallback(() => {
+    gridRef.current?.api?.sizeColumnsToFit()
   }, [])
 
   return (
@@ -590,6 +662,60 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
         <span className="text-xs text-surface-500 font-mono">
           {filteredByType.length} {filteredByType.length === 1 ? 'item' : 'items'}
         </span>
+
+        <div className="relative ml-auto" ref={columnMenuRef}>
+          <button
+            onClick={() => setShowColumnMenu(v => !v)}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-surface-700 border border-surface-200 rounded-lg bg-surface-50 hover:bg-white transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/>
+            </svg>
+            Columns
+            {hiddenColumns.size > 0 && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-accent/15 text-accent-dark">
+                {TOGGLEABLE_COLUMNS.length - hiddenColumns.size}/{TOGGLEABLE_COLUMNS.length}
+              </span>
+            )}
+          </button>
+
+          {showColumnMenu && (
+            <div className="absolute right-0 top-full mt-1 z-20 w-56 max-h-80 overflow-y-auto bg-white border border-surface-200 rounded-lg shadow-lg py-1">
+              <div className="flex items-center justify-between px-3 py-1.5 border-b border-surface-100">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">Show Columns</span>
+                <button
+                  onClick={() => setHiddenColumns(new Set())}
+                  className="text-[11px] text-accent hover:text-accent-dark font-medium"
+                >
+                  Show all
+                </button>
+              </div>
+              {TOGGLEABLE_COLUMNS.map(col => {
+                const visible = !hiddenColumns.has(col.colId)
+                return (
+                  <button
+                    key={col.colId}
+                    onClick={() => toggleColumn(col.colId)}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 text-left text-sm text-surface-700 hover:bg-surface-50"
+                  >
+                    <span
+                      className={`w-4 h-4 flex items-center justify-center rounded border ${
+                        visible ? 'bg-accent border-accent text-white' : 'border-surface-300 bg-white'
+                      }`}
+                    >
+                      {visible && (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 6 9 17l-5-5"/>
+                        </svg>
+                      )}
+                    </span>
+                    {col.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* AG Grid */}
@@ -601,6 +727,8 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
             columnDefs={columnDefs}
             defaultColDef={defaultColDef}
             onCellValueChanged={handleCellValueChanged}
+            onGridReady={handleGridReady}
+            onGridSizeChanged={handleGridSizeChanged}
             pagination={false}
             getRowId={(params) => params.data.id}
             domLayout="normal"

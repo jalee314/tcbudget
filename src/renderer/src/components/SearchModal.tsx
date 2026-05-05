@@ -271,6 +271,13 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
   const [sealedError, setSealedError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!sealedQuery.trim()) {
+      setSealedResults([])
+      setSealedError(null)
+      setIsSealedSearching(false)
+      return
+    }
+
     setIsSealedSearching(true)
     setSealedError(null)
     const timer = setTimeout(async () => {
