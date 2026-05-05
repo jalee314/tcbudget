@@ -3,7 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Database from 'better-sqlite3'
 import { v4 as uuidv4 } from 'uuid'
-import { writeFileSync } from 'fs'
+import { existsSync, writeFileSync } from 'fs'
 import { JustTCG } from 'justtcg-js'
 import { TTLCache } from './cache'
 
@@ -356,7 +356,19 @@ function setupIPC(): void {
 }
 
 // ─── Window Creation ────────────────────────────────────────────────────────
+function getWindowsIconPath(): string | undefined {
+  if (process.platform !== 'win32') return undefined
+
+  const iconPath = app.isPackaged
+    ? join(process.resourcesPath, 'icon.ico')
+    : join(app.getAppPath(), 'build', 'icon.ico')
+
+  return existsSync(iconPath) ? iconPath : undefined
+}
+
 function createWindow(): void {
+  const windowsIconPath = getWindowsIconPath()
+
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -370,6 +382,7 @@ function createWindow(): void {
       symbolColor: '#111827',
       height: 40
     },
+    icon: windowsIconPath,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
