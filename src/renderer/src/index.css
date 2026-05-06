@@ -245,21 +245,6 @@ body {
   box-shadow: 0 0 0 3px rgba(212, 255, 0, 0.2);
 }
 
-/* ─── Card Image Hover ────────────────────────────────────────────────── */
-.card-image-container {
-  position: relative;
-  overflow: hidden;
-  border-radius: 8px;
-}
-
-.card-image-container img {
-  transition: transform 0.3s ease;
-}
-
-.card-image-container:hover img {
-  transform: scale(1.05);
-}
-
 /* ─── Number Formatting ───────────────────────────────────────────────── */
 .tabular-nums {
   font-variant-numeric: tabular-nums;

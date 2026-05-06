@@ -41,6 +41,35 @@ function normalizeProductType(raw: string): SealedProduct['product_type'] {
   return PRODUCT_TYPE_MAP[raw.toLowerCase()] ?? 'Other'
 }
 
+// Detect sealed-product results returned by the cards endpoint so we can drop them
+// from the Single Cards tab. JustTCG has no native filter for cards-only.
+const SEALED_RARITY_PATTERNS = [
+  /booster\s*box/i,
+  /booster\s*bundle/i,
+  /elite\s*trainer\s*box/i,
+  /\betb\b/i,
+  /build\s*&?\s*battle/i,
+  /premium\s*collection/i,
+  /collection\s*box/i,
+  /tin\b/i,
+  /blister/i,
+  /pack\b/i,
+  /booster\b/i,
+  /sealed/i,
+]
+
+function isSealedResult(raw: any): boolean {
+  const rarity = String(raw?.rarity ?? '')
+  if (SEALED_RARITY_PATTERNS.some(rx => rx.test(rarity))) return true
+  // No card number is a strong signal that this isn't a single card
+  const number = String(raw?.number ?? '').trim()
+  if (!number) return true
+  // All variants are 'Sealed' condition → sealed product
+  const variants = raw?.variants ?? []
+  if (variants.length > 0 && variants.every((v: any) => v?.condition === 'Sealed')) return true
+  return false
+}
+
 function tcgplayerImageUrl(tcgplayerId: string | null | undefined): string {
   if (!tcgplayerId) return ''
   return `https://product-images.tcgplayer.com/fit-in/400x550/${tcgplayerId}.jpg`
@@ -92,7 +121,8 @@ interface SearchModalProps {
     condition: string,
     itemType?: 'Card' | 'Sealed' | 'Other',
     parentId?: string | null,
-    variantId?: string | null
+    variantId?: string | null,
+    purchaseDate?: string
   ) => void
   sealedItems?: InventoryCard[]
 }
@@ -157,9 +187,6 @@ function PulledFromCombobox({
       >
         {selected ? (
           <>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0 ${selected.is_opened ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-600'}`}>
-              {selected.is_opened ? 'Opened' : 'Sealed'}
-            </span>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-surface-900 truncate">{selected.name}</div>
               <div className="text-[11px] text-surface-500 truncate">{selected.set_name}</div>
@@ -169,7 +196,7 @@ function PulledFromCombobox({
         ) : (
           <input
             type="text"
-            placeholder={sealedItems.length === 0 ? 'No sealed items in inventory' : 'Search your sealed items...'}
+            placeholder={sealedItems.length === 0 ? 'No opened sealed items in inventory' : 'Search opened sealed items...'}
             value={query}
             disabled={sealedItems.length === 0}
             onChange={e => { setQuery(e.target.value); setOpen(true) }}
@@ -182,10 +209,6 @@ function PulledFromCombobox({
       {open && sealedItems.length > 0 && (
         <div className="absolute top-full left-0 right-0 z-20 border border-surface-200 rounded-lg shadow-lg max-h-44 overflow-y-auto mt-1"
           style={{ background: 'var(--color-surface-bg, white)' }}>
-          <div className="sticky top-0 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-surface-400 border-b border-surface-100"
-            style={{ background: 'var(--color-surface-bg, white)' }}>
-            {filtered.length} of {sealedItems.length} sealed item{sealedItems.length !== 1 ? 's' : ''}
-          </div>
           {filtered.length === 0 ? (
             <div className="px-3 py-3 text-xs text-surface-400 text-center">No matches for "{query}"</div>
           ) : (
@@ -195,9 +218,6 @@ function PulledFromCombobox({
                 onClick={() => handleSelect(item.id)}
                 className={`w-full text-left px-3 py-2 text-sm hover:bg-surface-50 flex items-center gap-2 transition-colors ${value === item.id ? 'bg-accent/5' : ''}`}
               >
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0 ${item.is_opened ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-600'}`}>
-                  {item.is_opened ? 'Opened' : 'Sealed'}
-                </span>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-surface-900 truncate">{item.name}</div>
                   <div className="text-[11px] text-surface-400 truncate">{item.set_name}</div>
@@ -232,6 +252,8 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
   const [quantity, setQuantity] = useState('1')
   const [condition, setCondition] = useState('Raw')
   const [parentId, setParentId] = useState('')
+  const [isGifted, setIsGifted] = useState(false)
+  const [purchaseDate, setPurchaseDate] = useState<string>(() => new Date().toISOString().slice(0, 10))
 
   // ─── Card search via JustTCG (debounced) ───────────────────────────────────
   const [cardResults, setCardResults] = useState<SearchCard[]>([])
@@ -253,7 +275,8 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
           setSearchError(res.error)
           setCardResults([])
         } else {
-          setCardResults((res.data as any[]).map(mapJustTCGCard))
+          const cardsOnly = (res.data as any[]).filter(raw => !isSealedResult(raw))
+          setCardResults(cardsOnly.map(mapJustTCGCard))
         }
       } catch (err: any) {
         setSearchError(err?.message ?? 'Search failed')
@@ -310,6 +333,8 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
     setManualName('')
     setManualSet('')
     setManualMarketPrice('')
+    setIsGifted(false)
+    setPurchaseDate(new Date().toISOString().slice(0, 10))
   }, [])
 
   const handleClose = useCallback(() => {
@@ -346,32 +371,32 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
   const handleAdd = useCallback(() => {
     if (!selectedItem) return
     if (selectedItem.type === 'card') {
-      const price = parseFloat(purchasePrice) || displayedMarketPrice
-      onAddCard(selectedItem.data, price, parseInt(quantity) || 1, condition, 'Card', parentId || null, activeVariant?.id ?? null)
+      const price = isGifted ? 0 : (parseFloat(purchasePrice) || displayedMarketPrice)
+      onAddCard(selectedItem.data, price, parseInt(quantity) || 1, condition, 'Card', parentId || null, activeVariant?.id ?? null, purchaseDate || undefined)
     } else {
       const p = selectedItem.data
-      const price = parseFloat(purchasePrice) || p.market_price
+      const price = isGifted ? 0 : (parseFloat(purchasePrice) || p.market_price)
       const sealedAsCard = {
         id: p.id, name: p.name, set_name: p.set_name, set_id: p.set_id,
         card_number: '', rarity: p.product_type, image_url: p.image_url, market_price: p.market_price
       }
-      onAddCard(sealedAsCard, price, parseInt(quantity) || 1, 'Sealed', 'Sealed', null, null)
+      onAddCard(sealedAsCard, price, parseInt(quantity) || 1, 'Sealed', 'Sealed', null, null, purchaseDate || undefined)
     }
     handleClose()
-  }, [selectedItem, purchasePrice, quantity, condition, parentId, activeVariant, displayedMarketPrice, onAddCard, handleClose])
+  }, [selectedItem, purchasePrice, quantity, condition, parentId, activeVariant, displayedMarketPrice, isGifted, purchaseDate, onAddCard, handleClose])
 
   const handleAddManual = useCallback(() => {
     if (!manualName.trim()) return
-    const price = parseFloat(purchasePrice) || 0
+    const price = isGifted ? 0 : (parseFloat(purchasePrice) || 0)
     const market = parseFloat(manualMarketPrice) || 0
     const qty = parseInt(quantity) || 1
     const customItem = {
       id: 'manual-' + Date.now(), name: manualName, set_name: manualSet,
       set_id: '', card_number: '', rarity: '', image_url: '', market_price: market
     }
-    onAddCard(customItem, price, qty, manualType === 'Sealed' ? 'Sealed' : condition, manualType, parentId || null)
+    onAddCard(customItem, price, qty, manualType === 'Sealed' ? 'Sealed' : condition, manualType, parentId || null, null, purchaseDate || undefined)
     handleClose()
-  }, [manualName, manualSet, manualMarketPrice, purchasePrice, quantity, condition, manualType, parentId, onAddCard, handleClose])
+  }, [manualName, manualSet, manualMarketPrice, purchasePrice, quantity, condition, manualType, parentId, isGifted, purchaseDate, onAddCard, handleClose])
 
   if (!isOpen) return null
 
@@ -387,11 +412,11 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
       <div className="flex gap-6">
         <div className="w-40 flex-shrink-0">
           {selectedItem.type === 'card' ? (
-            <div className="card-image-container rounded-xl overflow-hidden bg-surface-200 shadow-sm border border-surface-200">
+            <div className="rounded-xl overflow-hidden bg-surface-200 shadow-sm border border-surface-200">
               <img src={selectedItem.data.image_url} alt={selectedItem.data.name} className="w-full" />
             </div>
           ) : (
-            <div className="card-image-container rounded-xl overflow-hidden bg-surface-200 shadow-sm border border-surface-200">
+            <div className="rounded-xl overflow-hidden bg-surface-200 shadow-sm border border-surface-200">
               {selectedItem.data.image_url ? (
                 <img src={selectedItem.data.image_url} alt={selectedItem.data.name} className="w-full" />
               ) : (
@@ -432,8 +457,8 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                 <label className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-surface-500 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={purchasePrice === '0'}
-                    onChange={(e) => setPurchasePrice(e.target.checked ? '0' : '')}
+                    checked={isGifted}
+                    onChange={(e) => setIsGifted(e.target.checked)}
                     className="accent-accent w-3 h-3"
                   />
                   Gifted
@@ -441,12 +466,18 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
               </div>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500 text-sm font-mono pointer-events-none">$</span>
-                <input type="text" inputMode="decimal" placeholder={displayedMarketPrice.toFixed(2)} value={purchasePrice} onChange={e => setPurchasePrice(e.target.value)} disabled={purchasePrice === '0'} className="input-dark py-2 text-sm font-mono !pl-7 disabled:opacity-60" />
+                <input type="text" inputMode="decimal" placeholder={displayedMarketPrice.toFixed(2)} value={isGifted ? '0' : purchasePrice} onChange={e => setPurchasePrice(e.target.value)} disabled={isGifted} className="input-dark py-2 text-sm font-mono !pl-7 disabled:opacity-60" />
               </div>
             </div>
             <div>
               <label className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-1 block">Quantity</label>
               <input type="number" min="1" value={quantity} onChange={e => setQuantity(e.target.value)} className="input-dark py-2 text-sm font-mono" />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-1 block">
+                Purchase Date <span className="text-surface-400 font-normal normal-case">(optional)</span>
+              </label>
+              <input type="date" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)} className="input-dark py-2 text-sm font-mono" />
             </div>
             {selectedItem.type === 'card' && (
               <>
@@ -458,14 +489,13 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                     <option value="Raw LP">Raw LP</option>
                     <option value="PSA 10">PSA 10</option>
                     <option value="PSA 9">PSA 9</option>
-                    <option value="Sealed">Sealed</option>
                   </select>
                 </div>
-                <div>
+                <div className="col-span-2">
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-1 block">
-                    Pulled From <span className="text-surface-400 font-normal">(optional)</span>
+                    Pulled From <span className="text-surface-400 font-normal normal-case">(optional, opened sealed only)</span>
                   </label>
-                  <PulledFromCombobox sealedItems={sealedItems} value={parentId} onChange={(id) => { setParentId(id); if (id) setPurchasePrice('0') }} />
+                  <PulledFromCombobox sealedItems={sealedItems} value={parentId} onChange={setParentId} />
                 </div>
               </>
             )}
@@ -521,10 +551,12 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                   </svg>
                   <input type="text" placeholder="Search ETBs, booster boxes, bundles..." value={sealedQuery} onChange={e => setSealedQuery(e.target.value)} className="input-dark !pl-10" autoFocus />
                 </div>
-                <p className="text-[11px] text-surface-400 mt-1.5 px-1">
-                  {isSealedSearching ? 'Searching…' : `${sealedResults.length} result${sealedResults.length !== 1 ? 's' : ''}`}
-                  {sealedError && <span className="text-red-400 ml-1">— {sealedError}</span>}
-                </p>
+                {sealedQuery.trim() && (
+                  <p className="text-[11px] text-surface-400 mt-1.5 px-1">
+                    {isSealedSearching ? 'Searching…' : `${sealedResults.length} result${sealedResults.length !== 1 ? 's' : ''}`}
+                    {sealedError && <span className="text-red-400 ml-1">— {sealedError}</span>}
+                  </p>
+                )}
               </div>
             )}
             <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
@@ -534,9 +566,16 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                     <div className="text-center py-12 text-surface-400">
                       <p className="text-sm">Searching…</p>
                     </div>
+                  ) : !sealedQuery.trim() ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-surface-400">
+                      <svg className="mb-3 opacity-40" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                      </svg>
+                      <p className="text-sm">Type a product name to search</p>
+                    </div>
                   ) : sealedResults.length === 0 ? (
-                    <div className="text-center py-12 text-surface-500">
-                      <p className="text-sm">{sealedQuery ? `No results for "${sealedQuery}"` : 'No sealed products found'}</p>
+                    <div className="flex flex-col items-center justify-center py-12 text-surface-500">
+                      <p className="text-sm">No results for "{sealedQuery}"</p>
                     </div>
                   ) : (
                     <>
@@ -599,8 +638,8 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
               {selectedItem ? DetailForm : (
                 <div className="space-y-1">
                   {!cardQuery.trim() ? (
-                    <div className="text-center py-12 text-surface-400">
-                      <svg className="mx-auto mb-3 opacity-40" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <div className="flex flex-col items-center justify-center py-12 text-surface-400">
+                      <svg className="mb-3 opacity-40" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
                       </svg>
                       <p className="text-sm">Type a card name to search</p>
@@ -674,8 +713,8 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                     <label className="flex items-center gap-1 text-[11px] font-semibold text-surface-500 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={purchasePrice === '0'}
-                        onChange={(e) => setPurchasePrice(e.target.checked ? '0' : '')}
+                        checked={isGifted}
+                        onChange={(e) => setIsGifted(e.target.checked)}
                         className="accent-accent w-3 h-3"
                       />
                       Gifted
@@ -683,12 +722,18 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                   </div>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500 text-sm font-mono pointer-events-none">$</span>
-                    <input type="text" inputMode="decimal" value={purchasePrice} onChange={e => setPurchasePrice(e.target.value)} disabled={purchasePrice === '0'} placeholder="0.00" className="input-dark py-2.5 font-mono !pl-7 disabled:opacity-60" />
+                    <input type="text" inputMode="decimal" value={isGifted ? '0' : purchasePrice} onChange={e => setPurchasePrice(e.target.value)} disabled={isGifted} placeholder="0.00" className="input-dark py-2.5 font-mono !pl-7 disabled:opacity-60" />
                   </div>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-surface-700 mb-1.5 block">Quantity</label>
                   <input type="number" min="1" value={quantity} onChange={e => setQuantity(e.target.value)} className="input-dark py-2.5 font-mono" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-surface-700 mb-1.5 block">
+                    Purchase Date <span className="text-surface-400 font-normal">(optional)</span>
+                  </label>
+                  <input type="date" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)} className="input-dark py-2.5 font-mono" />
                 </div>
                 {manualType !== 'Sealed' && (
                   <div>
@@ -703,11 +748,11 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                   </div>
                 )}
                 {manualType === 'Card' && (
-                  <div>
+                  <div className="col-span-2">
                     <label className="text-xs font-semibold text-surface-700 mb-1.5 block">
-                      Pulled From <span className="text-surface-400 font-normal">(optional)</span>
+                      Pulled From <span className="text-surface-400 font-normal">(optional, opened sealed only)</span>
                     </label>
-                    <PulledFromCombobox sealedItems={sealedItems} value={parentId} onChange={(id) => { setParentId(id); if (id) setPurchasePrice('0') }} />
+                    <PulledFromCombobox sealedItems={sealedItems} value={parentId} onChange={setParentId} />
                   </div>
                 )}
               </div>

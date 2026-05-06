@@ -94,6 +94,12 @@ function initDatabase(): void {
   } catch (err) {
     // Column might already exist
   }
+
+  try {
+    db.exec(`ALTER TABLE inventory ADD COLUMN price_change_baseline REAL`)
+  } catch (err) {
+    // Column might already exist
+  }
 }
 
 // ─── IPC Handlers ───────────────────────────────────────────────────────────
@@ -108,8 +114,8 @@ function setupIPC(): void {
   ipcMain.handle('db:insert', (_event, card: Record<string, unknown>) => {
     const id = card.id || uuidv4()
     const stmt = db.prepare(`
-      INSERT INTO inventory (id, card_id, name, set_name, set_id, card_number, rarity, image_url, purchase_price, purchase_date, quantity, condition, market_price, last_updated, is_sold, sale_price, sale_date, notes, item_type, parent_id, is_opened, variant_id)
-      VALUES (@id, @card_id, @name, @set_name, @set_id, @card_number, @rarity, @image_url, @purchase_price, @purchase_date, @quantity, @condition, @market_price, @last_updated, @is_sold, @sale_price, @sale_date, @notes, @item_type, @parent_id, @is_opened, @variant_id)
+      INSERT INTO inventory (id, card_id, name, set_name, set_id, card_number, rarity, image_url, purchase_price, purchase_date, quantity, condition, market_price, last_updated, is_sold, sale_price, sale_date, notes, item_type, parent_id, is_opened, variant_id, price_change_baseline)
+      VALUES (@id, @card_id, @name, @set_name, @set_id, @card_number, @rarity, @image_url, @purchase_price, @purchase_date, @quantity, @condition, @market_price, @last_updated, @is_sold, @sale_price, @sale_date, @notes, @item_type, @parent_id, @is_opened, @variant_id, @price_change_baseline)
     `)
 
     const now = new Date().toISOString()
@@ -135,7 +141,8 @@ function setupIPC(): void {
       item_type: card.item_type || 'Card',
       parent_id: card.parent_id || null,
       is_opened: card.is_opened || 0,
-      variant_id: card.variant_id || null
+      variant_id: card.variant_id || null,
+      price_change_baseline: card.price_change_baseline ?? card.market_price ?? 0
     })
 
     return { id, ...card }
@@ -147,7 +154,8 @@ function setupIPC(): void {
     const allowedFields = [
       'purchase_price', 'purchase_date', 'quantity', 'condition',
       'market_price', 'is_sold', 'sale_price', 'sale_date', 'notes',
-      'name', 'set_name', 'last_updated', 'item_type', 'parent_id', 'is_opened', 'variant_id'
+      'name', 'set_name', 'last_updated', 'item_type', 'parent_id', 'is_opened', 'variant_id',
+      'price_change_baseline'
     ]
 
     if (!allowedFields.includes(field)) {
@@ -193,8 +201,8 @@ function setupIPC(): void {
   // Bulk insert (for seeding mock data)
   ipcMain.handle('db:bulkInsert', (_event, cards: Record<string, unknown>[]) => {
     const stmt = db.prepare(`
-      INSERT OR IGNORE INTO inventory (id, card_id, name, set_name, set_id, card_number, rarity, image_url, purchase_price, purchase_date, quantity, condition, market_price, last_updated, is_sold, sale_price, sale_date, notes, item_type, parent_id, is_opened, variant_id)
-      VALUES (@id, @card_id, @name, @set_name, @set_id, @card_number, @rarity, @image_url, @purchase_price, @purchase_date, @quantity, @condition, @market_price, @last_updated, @is_sold, @sale_price, @sale_date, @notes, @item_type, @parent_id, @is_opened, @variant_id)
+      INSERT OR IGNORE INTO inventory (id, card_id, name, set_name, set_id, card_number, rarity, image_url, purchase_price, purchase_date, quantity, condition, market_price, last_updated, is_sold, sale_price, sale_date, notes, item_type, parent_id, is_opened, variant_id, price_change_baseline)
+      VALUES (@id, @card_id, @name, @set_name, @set_id, @card_number, @rarity, @image_url, @purchase_price, @purchase_date, @quantity, @condition, @market_price, @last_updated, @is_sold, @sale_price, @sale_date, @notes, @item_type, @parent_id, @is_opened, @variant_id, @price_change_baseline)
     `)
 
     const insertMany = db.transaction((items: Record<string, unknown>[]) => {
@@ -222,7 +230,8 @@ function setupIPC(): void {
           item_type: card.item_type || 'Card',
           parent_id: card.parent_id || null,
           is_opened: card.is_opened || 0,
-          variant_id: card.variant_id || null
+          variant_id: card.variant_id || null,
+          price_change_baseline: card.price_change_baseline ?? card.market_price ?? 0
         })
       }
     })

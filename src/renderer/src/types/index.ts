@@ -21,6 +21,7 @@ export interface InventoryCard {
   parent_id?: string | null
   is_opened?: number
   variant_id?: string | null
+  price_change_baseline?: number | null
 }
 
 export interface SearchCardVariant {

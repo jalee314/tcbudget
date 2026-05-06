@@ -4,22 +4,32 @@ import {
   ColDef,
   CellValueChangedEvent,
   ICellRendererParams,
+  IHeaderParams,
   GridReadyEvent
 } from 'ag-grid-community'
 import { InventoryCard } from '../types'
+
+const CARD_CONDITIONS = ['Raw', 'Raw NM', 'Raw LP', 'Raw MP', 'Raw HP', 'PSA 10', 'PSA 9', 'PSA 8', 'PSA 7', 'CGC 10', 'CGC 9.5', 'CGC 9', 'BGS 10', 'BGS 9.5', 'BGS 9']
+const SEALED_CONDITIONS = ['Sealed', 'Opened']
 
 const TOGGLEABLE_COLUMNS: { colId: string; label: string }[] = [
   { colId: 'rarity', label: 'Rarity' },
   { colId: 'condition', label: 'Condition' },
   { colId: 'quantity', label: 'Qty' },
-  { colId: 'purchase_price', label: 'Purchase' },
-  { colId: 'market_price', label: 'Market' },
-  { colId: 'unrealized_pl', label: 'P&L' },
+  { colId: 'market_price', label: 'Market Price' },
+  { colId: 'price_change', label: 'Price Change' },
+  { colId: 'market_value', label: 'Market Value' },
+  { colId: 'cost_basis', label: 'Cost Basis' },
+  { colId: 'total_gl', label: 'Total G/L' },
   { colId: 'status', label: 'Status' },
   { colId: 'sale_price', label: 'Sale' },
   { colId: 'purchase_date', label: 'Date' },
   { colId: 'notes', label: 'Notes' }
 ]
+
+const DEFAULT_HIDDEN: string[] = ['status', 'sale_price', 'purchase_date']
+
+type DisplayMode = '$' | '%'
 
 type GridRow = InventoryCard & {
   __isGroup?: boolean
@@ -37,6 +47,7 @@ interface DataGridProps {
   onToggleSold: (card: InventoryCard) => void
   onToggleOpened: (card: InventoryCard) => void
   onViewContents?: (id: string) => void
+  onEditPulledFrom?: (card: InventoryCard) => void
 }
 
 // ─── Custom Cell Renderers ──────────────────────────────────────────────
@@ -109,59 +120,113 @@ function CardNameRenderer(props: ICellRendererParams<GridRow> & { onToggleGroup?
   )
 }
 
+function RarityRenderer(props: ICellRendererParams<GridRow>) {
+  const data = props.data
+  if (!data) return null
+  if (data.item_type === 'Sealed') return <span className="text-surface-300">—</span>
+  return <span className="text-surface-500 text-xs">{data.rarity || '—'}</span>
+}
+
+function ConditionRenderer(props: ICellRendererParams<GridRow>) {
+  const data = props.data
+  if (!data) return null
+  if (data.item_type === 'Sealed') {
+    const isOpened = data.is_opened === 1
+    return (
+      <span className={`text-xs font-medium ${isOpened ? 'text-amber-700' : 'text-surface-700'}`}>
+        {isOpened ? 'Opened' : 'Sealed'}
+      </span>
+    )
+  }
+  return <span className="text-surface-700 text-xs font-medium">{data.condition || '—'}</span>
+}
+
 function MarketRenderer(props: ICellRendererParams<GridRow>) {
   const data = props.data
   if (!data) return null
-  const unit = data.market_price
-  const total = unit * data.quantity
   return (
-    <div className="flex items-baseline gap-1.5 font-mono">
-      <span className="text-surface-900 font-medium text-sm">{formatCurrency(unit)}</span>
-      {data.quantity > 1 && (
-        <span className="text-surface-400 text-xs">({formatCurrency(total)})</span>
-      )}
-    </div>
+    <span className="text-surface-900 font-medium text-sm font-mono">
+      {formatCurrency(data.market_price)}
+    </span>
   )
 }
 
-function PurchaseRenderer(props: ICellRendererParams<GridRow>) {
+function MarketValueRenderer(props: ICellRendererParams<GridRow>) {
+  const data = props.data
+  if (!data) return null
+  return (
+    <span className="text-surface-900 font-medium text-sm font-mono">
+      {formatCurrency(data.market_price * data.quantity)}
+    </span>
+  )
+}
+
+function CostBasisRenderer(props: ICellRendererParams<GridRow>) {
   const data = props.data
   if (!data) return null
   const isGroup = !!data.__isGroup
-  const unit = data.purchase_price
-  const total = unit * data.quantity
   return (
-    <div className="flex items-baseline gap-1.5 font-mono">
-      <span className={`text-sm ${isGroup ? 'text-surface-500 italic' : 'text-surface-700'}`}>
-        {isGroup ? '~' : ''}{formatCurrency(unit)}
-      </span>
-      {data.quantity > 1 && (
-        <span className="text-surface-400 text-xs">({formatCurrency(total)})</span>
-      )}
-    </div>
+    <span className={`text-sm font-mono ${isGroup ? 'text-surface-500 italic' : 'text-surface-700'}`}>
+      {formatCurrency(data.purchase_price * data.quantity)}
+    </span>
   )
 }
 
-function PLRenderer(props: ICellRendererParams<GridRow>) {
-  const data = props.data
-  if (!data) return null
-
-  const pl = (data.market_price - data.purchase_price) * data.quantity
-  const isPositive = pl >= 0
-  const hasReturn = data.purchase_price > 0
-  const ret = hasReturn ? ((data.market_price - data.purchase_price) / data.purchase_price) * 100 : 0
-
-  return (
-    <div className="flex items-baseline gap-1.5 font-mono">
-      <span className={`text-sm font-medium ${isPositive ? 'text-gain' : 'text-loss'}`}>
-        {isPositive ? '+' : ''}{formatCurrency(pl)}
+function makePriceChangeRenderer(getMode: () => DisplayMode) {
+  return function PriceChangeRenderer(props: ICellRendererParams<GridRow>) {
+    const data = props.data
+    if (!data) return null
+    // Price change uses a baseline snapshotted at add time so newly added items
+    // show 0. Updates only when market_price refreshes (throttled to ~12h).
+    const baseline = data.price_change_baseline ?? data.market_price
+    const delta = data.market_price - baseline
+    const isPositive = delta >= 0
+    const pct = baseline > 0 ? ((data.market_price - baseline) / baseline) * 100 : null
+    const mode = getMode()
+    const colorClass = delta === 0 ? 'text-surface-500' : isPositive ? 'text-gain' : 'text-loss'
+    return (
+      <span className={`text-sm font-medium font-mono ${colorClass}`}>
+        {mode === '$'
+          ? `${isPositive && delta !== 0 ? '+' : ''}${formatCurrency(delta)}`
+          : pct == null ? '—' : `${isPositive && pct !== 0 ? '+' : ''}${pct.toFixed(2)}%`}
       </span>
-      {hasReturn && (
-        <span className="text-surface-400 text-xs">
-          ({isPositive ? '▲' : '▼'} {Math.abs(ret).toFixed(1)}%)
-        </span>
-      )}
-    </div>
+    )
+  }
+}
+
+function makeTotalGLRenderer(getMode: () => DisplayMode) {
+  return function TotalGLRenderer(props: ICellRendererParams<GridRow>) {
+    const data = props.data
+    if (!data) return null
+    const gl = (data.market_price - data.purchase_price) * data.quantity
+    const isPositive = gl >= 0
+    const pct = data.purchase_price > 0
+      ? ((data.market_price - data.purchase_price) / data.purchase_price) * 100
+      : null
+    const mode = getMode()
+    const colorClass = gl === 0 ? 'text-surface-500' : isPositive ? 'text-gain' : 'text-loss'
+    return (
+      <span className={`text-sm font-medium font-mono ${colorClass}`}>
+        {mode === '$'
+          ? `${isPositive && gl !== 0 ? '+' : ''}${formatCurrency(gl)}`
+          : pct == null ? '—' : `${isPositive && pct !== 0 ? '+' : ''}${pct.toFixed(2)}%`}
+      </span>
+    )
+  }
+}
+
+function ToggleHeader(props: IHeaderParams & { mode: DisplayMode; onToggle: () => void; label: string }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); props.onToggle() }}
+      className="flex items-center gap-1 w-full h-full text-left hover:text-surface-900 transition-colors"
+      title={`Show as ${props.mode === '$' ? 'percentage' : 'dollars'}`}
+    >
+      <span>{props.label}</span>
+      <span className="text-[10px] font-bold px-1 py-0.5 rounded bg-surface-100 text-surface-500">
+        {props.mode === '$' ? '$' : '%'}
+      </span>
+    </button>
   )
 }
 
@@ -216,6 +281,7 @@ function ActionsRenderer(props: ICellRendererParams<GridRow> & {
   onToggleSold: (card: InventoryCard) => void
   onToggleOpened: (card: InventoryCard) => void
   onViewContents?: (id: string) => void
+  onEditPulledFrom?: (card: InventoryCard) => void
 }) {
   const data = props.data
   if (!data || data.__isGroup) return null
@@ -223,9 +289,24 @@ function ActionsRenderer(props: ICellRendererParams<GridRow> & {
   const isSold = !!data.is_sold
   const isSealed = data.item_type === 'Sealed'
   const isOpened = data.is_opened === 1
+  const isCard = data.item_type === 'Card'
 
   return (
     <div className="flex items-center gap-1">
+      {/* Pulled-from edit — cards only */}
+      {isCard && props.onEditPulledFrom && (
+        <button
+          onClick={() => props.onEditPulledFrom!(data)}
+          className={`p-1.5 rounded-md transition-all ${data.parent_id ? 'text-accent-dark hover:bg-accent/10' : 'text-surface-500 hover:text-accent-dark hover:bg-accent/10'}`}
+          title={data.parent_id ? 'Edit pulled-from source' : 'Set pulled-from source'}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+          </svg>
+        </button>
+      )}
+
       {/* View contents — show for opened sealed items */}
       {isSealed && isOpened && props.onViewContents && (
         <button
@@ -297,17 +378,19 @@ function formatCurrency(val: number): string {
   }).format(val)
 }
 
-
 // ─── Main Component ─────────────────────────────────────────────────────
 
-export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onToggleSold, onToggleOpened, onViewContents }: DataGridProps) {
+export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onToggleSold, onToggleOpened, onViewContents, onEditPulledFrom }: DataGridProps) {
   const gridRef = useRef<AgGridReact>(null)
+  const gridWrapperRef = useRef<HTMLDivElement>(null)
   const [filterText, setFilterText] = useState('')
   const [viewFilter, setViewFilter] = useState<'all' | 'cards' | 'sealed'>('all')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
-  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(new Set())
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => new Set(DEFAULT_HIDDEN))
   const [showColumnMenu, setShowColumnMenu] = useState(false)
   const columnMenuRef = useRef<HTMLDivElement>(null)
+  const [priceChangeMode, setPriceChangeMode] = useState<DisplayMode>('$')
+  const [totalGLMode, setTotalGLMode] = useState<DisplayMode>('$')
 
   const toggleColumn = useCallback((colId: string) => {
     setHiddenColumns(prev => {
@@ -332,6 +415,29 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
   useEffect(() => {
     gridRef.current?.api?.sizeColumnsToFit()
   }, [hiddenColumns])
+
+  // Refresh price-change/total-gl cells when their display mode flips
+  useEffect(() => {
+    gridRef.current?.api?.refreshCells({ columns: ['price_change'], force: true })
+  }, [priceChangeMode])
+  useEffect(() => {
+    gridRef.current?.api?.refreshCells({ columns: ['total_gl'], force: true })
+  }, [totalGLMode])
+
+  // Click on grid wrapper background → clear cell focus
+  useEffect(() => {
+    const wrapper = gridWrapperRef.current
+    if (!wrapper) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      // If the click landed outside any actual row/cell, clear focus
+      if (!target.closest('.ag-row') && !target.closest('.ag-header')) {
+        gridRef.current?.api?.clearFocusedCell()
+      }
+    }
+    wrapper.addEventListener('mousedown', handler)
+    return () => wrapper.removeEventListener('mousedown', handler)
+  }, [])
 
   const toggleGroup = useCallback((key: string) => {
     setExpandedGroups(prev => {
@@ -432,6 +538,9 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
     return out
   }, [filteredByType, expandedGroups, rowOrder])
 
+  const priceChangeRenderer = useMemo(() => makePriceChangeRenderer(() => priceChangeMode), [priceChangeMode])
+  const totalGLRenderer = useMemo(() => makeTotalGLRenderer(() => totalGLMode), [totalGLMode])
+
   const columnDefs = useMemo<ColDef<GridRow>[]>(() => [
     {
       headerName: 'Item',
@@ -453,21 +562,27 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       minWidth: 75,
       filter: false,
       hide: hiddenColumns.has('rarity'),
-      cellClass: 'text-surface-500 text-xs'
+      cellRenderer: RarityRenderer
     },
     {
       headerName: 'Condition',
       colId: 'condition',
       field: 'condition',
-      width: 105,
-      minWidth: 85,
+      width: 110,
+      minWidth: 90,
       hide: hiddenColumns.has('condition'),
       editable: (params) => !params.data?.__isGroup,
       cellEditor: 'agSelectCellEditor',
-      cellEditorParams: {
-        values: ['Raw', 'Raw NM', 'Raw LP', 'Raw MP', 'Raw HP', 'PSA 10', 'PSA 9', 'PSA 8', 'PSA 7', 'CGC 10', 'CGC 9.5', 'CGC 9', 'BGS 10', 'BGS 9.5', 'BGS 9', 'Sealed']
-      },
-      cellClass: 'text-surface-700 text-xs font-medium'
+      cellEditorParams: (params: any) => ({
+        values: params.data?.item_type === 'Sealed' ? SEALED_CONDITIONS : CARD_CONDITIONS
+      }),
+      cellRenderer: ConditionRenderer,
+      valueGetter: (params) => {
+        const d = params.data
+        if (!d) return ''
+        if (d.item_type === 'Sealed') return d.is_opened === 1 ? 'Opened' : 'Sealed'
+        return d.condition || ''
+      }
     },
     {
       headerName: 'Qty',
@@ -481,55 +596,95 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       cellClass: 'text-center font-mono'
     },
     {
-      headerName: 'Purchase',
-      colId: 'purchase_price',
-      field: 'purchase_price',
-      width: 130,
-      minWidth: 110,
-      hide: hiddenColumns.has('purchase_price'),
-      editable: (params) => !params.data?.__isGroup,
-      cellDataType: 'number',
-      cellRenderer: PurchaseRenderer,
-      tooltipValueGetter: (params) => {
-        const d = params.data
-        if (!d) return ''
-        return `Unit ${formatCurrency(d.purchase_price)} · Cost basis ${formatCurrency(d.purchase_price * d.quantity)}`
-      }
-    },
-    {
-      headerName: 'Market',
+      headerName: 'Market Price',
       colId: 'market_price',
       field: 'market_price',
-      width: 130,
-      minWidth: 110,
+      width: 120,
+      minWidth: 100,
       hide: hiddenColumns.has('market_price'),
       cellRenderer: MarketRenderer,
       tooltipValueGetter: (params) => {
         const d = params.data
         if (!d) return ''
-        return `Unit ${formatCurrency(d.market_price)} · Total ${formatCurrency(d.market_price * d.quantity)}`
+        return `Unit ${formatCurrency(d.market_price)}`
       }
     },
     {
-      headerName: 'P&L',
-      colId: 'unrealized_pl',
-      cellRenderer: PLRenderer,
-      width: 145,
-      minWidth: 120,
-      hide: hiddenColumns.has('unrealized_pl'),
-      comparator: (_a, _b, nodeA, nodeB) => {
-        const plA = nodeA.data ? (nodeA.data.market_price - nodeA.data.purchase_price) * nodeA.data.quantity : 0
-        const plB = nodeB.data ? (nodeB.data.market_price - nodeB.data.purchase_price) * nodeB.data.quantity : 0
-        return plA - plB
+      headerName: 'PRICE CHANGE',
+      colId: 'price_change',
+      width: 130,
+      minWidth: 110,
+      hide: hiddenColumns.has('price_change'),
+      cellRenderer: priceChangeRenderer,
+      headerComponent: ToggleHeader,
+      headerComponentParams: {
+        mode: priceChangeMode,
+        onToggle: () => setPriceChangeMode(m => m === '$' ? '%' : '$'),
+        label: 'PRICE CHANGE'
       },
-      sortable: true
+      sortable: true,
+      comparator: (_a, _b, nodeA, nodeB) => {
+        const baseA = nodeA.data?.price_change_baseline ?? nodeA.data?.market_price ?? 0
+        const baseB = nodeB.data?.price_change_baseline ?? nodeB.data?.market_price ?? 0
+        const a = nodeA.data ? nodeA.data.market_price - baseA : 0
+        const b = nodeB.data ? nodeB.data.market_price - baseB : 0
+        return a - b
+      }
+    },
+    {
+      headerName: 'Market Value',
+      colId: 'market_value',
+      width: 130,
+      minWidth: 110,
+      hide: hiddenColumns.has('market_value'),
+      cellRenderer: MarketValueRenderer,
+      sortable: true,
+      comparator: (_a, _b, nodeA, nodeB) => {
+        const a = nodeA.data ? nodeA.data.market_price * nodeA.data.quantity : 0
+        const b = nodeB.data ? nodeB.data.market_price * nodeB.data.quantity : 0
+        return a - b
+      }
+    },
+    {
+      headerName: 'COST BASIS',
+      colId: 'cost_basis',
+      width: 130,
+      minWidth: 110,
+      hide: hiddenColumns.has('cost_basis'),
+      cellRenderer: CostBasisRenderer,
+      sortable: true,
+      comparator: (_a, _b, nodeA, nodeB) => {
+        const a = nodeA.data ? nodeA.data.purchase_price * nodeA.data.quantity : 0
+        const b = nodeB.data ? nodeB.data.purchase_price * nodeB.data.quantity : 0
+        return a - b
+      }
+    },
+    {
+      headerName: 'TOTAL G/L',
+      colId: 'total_gl',
+      width: 130,
+      minWidth: 110,
+      hide: hiddenColumns.has('total_gl'),
+      cellRenderer: totalGLRenderer,
+      headerComponent: ToggleHeader,
+      headerComponentParams: {
+        mode: totalGLMode,
+        onToggle: () => setTotalGLMode(m => m === '$' ? '%' : '$'),
+        label: 'TOTAL G/L'
+      },
+      sortable: true,
+      comparator: (_a, _b, nodeA, nodeB) => {
+        const a = nodeA.data ? (nodeA.data.market_price - nodeA.data.purchase_price) * nodeA.data.quantity : 0
+        const b = nodeB.data ? (nodeB.data.market_price - nodeB.data.purchase_price) * nodeB.data.quantity : 0
+        return a - b
+      }
     },
     {
       headerName: 'Status',
       colId: 'status',
       cellRenderer: StatusRenderer,
-      width: 85,
-      minWidth: 75,
+      width: 95,
+      minWidth: 85,
       hide: hiddenColumns.has('status'),
       filter: false,
       sortable: true,
@@ -563,8 +718,8 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       headerName: 'Date',
       colId: 'purchase_date',
       field: 'purchase_date',
-      width: 100,
-      minWidth: 90,
+      width: 110,
+      minWidth: 95,
       hide: hiddenColumns.has('purchase_date'),
       editable: (params) => !params.data?.__isGroup,
       cellClass: 'text-surface-500 text-xs font-mono'
@@ -582,21 +737,22 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
     {
       headerName: '',
       colId: 'actions',
-      valueGetter: (params) => params.data ? `${params.data.is_sold}|${params.data.is_opened}` : '',
-      width: 110,
-      minWidth: 110,
+      valueGetter: (params) => params.data ? `${params.data.is_sold}|${params.data.is_opened}|${params.data.parent_id ?? ''}` : '',
+      width: 140,
+      minWidth: 140,
       cellRenderer: ActionsRenderer,
       cellRendererParams: {
         onDelete: onDeleteRow,
         onToggleSold: onToggleSold,
         onToggleOpened: onToggleOpened,
-        onViewContents: onViewContents
+        onViewContents: onViewContents,
+        onEditPulledFrom: onEditPulledFrom
       },
       pinned: 'right' as const,
       sortable: false,
       filter: false
     }
-  ], [onDeleteRow, onToggleSold, onToggleOpened, onViewContents, toggleGroup, hiddenColumns])
+  ], [onDeleteRow, onToggleSold, onToggleOpened, onViewContents, onEditPulledFrom, toggleGroup, hiddenColumns, priceChangeRenderer, totalGLRenderer, priceChangeMode, totalGLMode])
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
@@ -606,11 +762,22 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
   }), [])
 
   const handleCellValueChanged = useCallback((event: CellValueChangedEvent<GridRow>) => {
-    if (event.data && !event.data.__isGroup && event.colDef.field) {
+    if (!event.data || event.data.__isGroup) return
+
+    // Special-case: editing the Condition cell on a sealed item maps to is_opened.
+    if (event.colDef.colId === 'condition' && event.data.item_type === 'Sealed') {
+      const newVal = event.newValue as string
+      const newOpened = newVal === 'Opened' ? 1 : 0
+      if ((event.data.is_opened ?? 0) !== newOpened) {
+        onCellValueChanged(event.data.id, 'is_opened', newOpened)
+      }
+      // Don't write Sealed/Opened into the condition column itself.
+      event.api.refreshCells({ rowNodes: [event.node], force: true })
+      return
+    }
+
+    if (event.colDef.field) {
       onCellValueChanged(event.data.id, event.colDef.field, event.newValue)
-      // Other cells in this row (Market total, Cost basis in Purchase, P&L, Sale)
-      // depend on the edited value — force them to recompute now instead of waiting
-      // for the parent's state round-trip.
       event.api.refreshCells({ rowNodes: [event.node], force: true })
     }
   }, [onCellValueChanged])
@@ -719,7 +886,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       </div>
 
       {/* AG Grid */}
-      <div className="flex-1 px-5 pb-4">
+      <div className="flex-1 px-5 pb-4" ref={gridWrapperRef}>
         <div className="ag-theme-alpine ag-theme-custom-light w-full h-full rounded-xl overflow-hidden glass-card-subtle">
           <AgGridReact<GridRow>
             ref={gridRef}

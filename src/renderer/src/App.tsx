@@ -4,8 +4,20 @@ import SummaryCards from './components/SummaryCards'
 import DataGrid from './components/DataGrid'
 import SearchModal from './components/SearchModal'
 import SellModal from './components/SellModal'
+import PulledFromEditor from './components/PulledFromEditor'
 import { InventoryCard, SearchCard, PortfolioSummary } from './types'
 import { v4 as uuidv4 } from 'uuid'
+
+const LIQUIDATION_PCT_KEY = 'liquidation_pct_v1'
+const LAST_AUTO_REFRESH_KEY = 'last_auto_refresh_at'
+const AUTO_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000 // 12 hours
+
+function loadLiquidationPct(): number {
+  const raw = localStorage.getItem(LIQUIDATION_PCT_KEY)
+  if (!raw) return 100
+  const n = parseFloat(raw)
+  return Number.isFinite(n) && n > 0 && n <= 100 ? n : 100
+}
 
 export default function App() {
   const [inventory, setInventory] = useState<InventoryCard[]>([])
@@ -14,6 +26,14 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [activeParentFilter, setActiveParentFilter] = useState<string | null>(null)
   const [sellingCard, setSellingCard] = useState<InventoryCard | null>(null)
+  const [editingPulledFromFor, setEditingPulledFromFor] = useState<InventoryCard | null>(null)
+  const [liquidationPct, setLiquidationPct] = useState<number>(() => loadLiquidationPct())
+
+  const updateLiquidationPct = useCallback((value: number) => {
+    const clamped = Math.max(1, Math.min(100, Math.round(value)))
+    setLiquidationPct(clamped)
+    localStorage.setItem(LIQUIDATION_PCT_KEY, String(clamped))
+  }, [])
 
   // ─── Load data on mount ────────────────────────────────────────────
   useEffect(() => {
@@ -28,8 +48,17 @@ export default function App() {
             }
             localStorage.setItem('seed_cleanup_v2', '1')
           }
-          const rows = await window.electronAPI.db.getAll()
-          setInventory(rows as unknown as InventoryCard[])
+          const rows = (await window.electronAPI.db.getAll()) as unknown as InventoryCard[]
+          // Backfill price_change_baseline for any legacy item missing one — lock it to
+          // current market price so price-change starts at 0 from this point on.
+          for (const row of rows) {
+            if (row.price_change_baseline == null) {
+              const baseline = row.market_price ?? 0
+              await window.electronAPI.db.update(row.id, 'price_change_baseline', baseline)
+              row.price_change_baseline = baseline
+            }
+          }
+          setInventory(rows)
         } else {
           setInventory([])
         }
@@ -54,7 +83,8 @@ export default function App() {
       opened.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
     // Opened sealed items have no resale value as sealed product — treated as $0 market value
     const totalMarketValue = held.reduce((sum, c) => sum + c.market_price * c.quantity, 0)
-    const unrealizedPL = totalMarketValue - totalCostBasis
+    const liquidationFactor = liquidationPct / 100
+    const unrealizedPL = totalMarketValue * liquidationFactor - totalCostBasis
     const unrealizedPLPercent = totalCostBasis > 0 ? (unrealizedPL / totalCostBasis) * 100 : 0
     const realizedGains =
       sold.reduce((sum, c) => sum + c.sale_price - (c.purchase_price * c.quantity), 0) -
@@ -79,7 +109,7 @@ export default function App() {
       openedCount: opened.length,
       openedCost
     }
-  }, [inventory])
+  }, [inventory, liquidationPct])
 
   // ─── Cell edit handler (auto-save) ─────────────────────────────────
   const handleCellValueChanged = useCallback(async (id: string, field: string, value: unknown) => {
@@ -103,7 +133,8 @@ export default function App() {
     condition: string,
     itemType: 'Card' | 'Sealed' | 'Other' = 'Card',
     parentId: string | null = null,
-    variantId: string | null = null
+    variantId: string | null = null,
+    purchaseDate?: string
   ) => {
     const now = new Date().toISOString()
     const newCard: InventoryCard = {
@@ -116,7 +147,7 @@ export default function App() {
       rarity: searchCard.rarity,
       image_url: searchCard.image_url,
       purchase_price: purchasePrice,
-      purchase_date: now.split('T')[0],
+      purchase_date: purchaseDate || now.split('T')[0],
       quantity,
       condition,
       market_price: searchCard.market_price,
@@ -127,7 +158,8 @@ export default function App() {
       notes: '',
       item_type: itemType,
       parent_id: parentId,
-      variant_id: variantId
+      variant_id: variantId,
+      price_change_baseline: searchCard.market_price
     }
 
     try {
@@ -261,12 +293,26 @@ export default function App() {
         const rows = await window.electronAPI.db.getAll()
         setInventory(rows as unknown as InventoryCard[])
       }
+      localStorage.setItem(LAST_AUTO_REFRESH_KEY, String(Date.now()))
     } catch (err) {
       console.error('Failed to refresh prices:', err)
     } finally {
       setIsRefreshing(false)
     }
   }, [inventory])
+
+  // Auto-refresh prices on app load if it's been > 12h since last refresh.
+  // Manual refresh button still works at any time.
+  useEffect(() => {
+    if (isLoading || inventory.length === 0) return
+    const lastRaw = localStorage.getItem(LAST_AUTO_REFRESH_KEY)
+    const last = lastRaw ? parseInt(lastRaw, 10) : 0
+    if (Date.now() - last < AUTO_REFRESH_INTERVAL_MS) return
+    handleRefreshPrices()
+    // Intentionally not depending on handleRefreshPrices identity to avoid loops;
+    // we only want this to fire once per app session when threshold exceeded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading])
 
   // ─── Export CSV ───────────────────────────────────────────────────
   const handleExportCsv = useCallback(async () => {
@@ -336,20 +382,21 @@ export default function App() {
         onExportCsv={handleExportCsv}
         isRefreshing={isRefreshing}
       />
-      <SummaryCards summary={summary} />
+      <SummaryCards
+        summary={summary}
+        liquidationPct={liquidationPct}
+        onLiquidationPctChange={updateLiquidationPct}
+      />
       {activeParentFilter && (
-        <div className="mx-6 mt-6 px-4 py-3 bg-surface-100 border border-surface-200 rounded-lg flex items-center justify-between animate-fade-in">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">📦</span>
-            <span className="text-sm text-surface-900 font-medium">
-              Viewing contents of: <span className="font-bold text-surface-900">{parentItemName}</span>
-            </span>
-          </div>
-          <button 
+        <div className="mx-6 mt-4 flex items-center justify-between animate-fade-in">
+          <span className="text-sm text-surface-700">
+            Viewing contents of <span className="font-semibold text-surface-900">{parentItemName}</span>
+          </span>
+          <button
             onClick={() => setActiveParentFilter(null)}
-            className="text-xs font-semibold text-surface-500 hover:text-surface-900 px-3 py-1.5 rounded-md hover:bg-surface-200 transition-colors"
+            className="text-xs font-semibold text-accent-dark border border-accent/40 bg-accent/10 hover:bg-accent/20 px-3 py-1.5 rounded-md transition-colors"
           >
-            Clear Filter
+            Clear
           </button>
         </div>
       )}
@@ -361,19 +408,31 @@ export default function App() {
           onToggleSold={handleToggleSold}
           onToggleOpened={handleToggleOpened}
           onViewContents={setActiveParentFilter}
+          onEditPulledFrom={(card) => setEditingPulledFromFor(card)}
         />
       </div>
       <SearchModal
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
         onAddCard={handleAddCard}
-        sealedItems={inventory.filter(c => c.item_type === 'Sealed')}
+        sealedItems={inventory.filter(c => c.item_type === 'Sealed' && c.is_opened === 1)}
       />
       <SellModal
         card={sellingCard}
         onClose={() => setSellingCard(null)}
         onConfirm={handleConfirmSale}
       />
+      {editingPulledFromFor && (
+        <PulledFromEditor
+          card={editingPulledFromFor}
+          openedSealedItems={inventory.filter(c => c.item_type === 'Sealed' && c.is_opened === 1)}
+          onClose={() => setEditingPulledFromFor(null)}
+          onSave={(parentId) => {
+            handleCellValueChanged(editingPulledFromFor.id, 'parent_id', parentId)
+            setEditingPulledFromFor(null)
+          }}
+        />
+      )}
     </div>
   )
 }

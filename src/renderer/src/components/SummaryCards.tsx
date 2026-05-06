@@ -1,8 +1,68 @@
-import React from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { PortfolioSummary } from '../types'
 
 interface SummaryCardsProps {
   summary: PortfolioSummary
+  liquidationPct: number
+  onLiquidationPctChange: (value: number) => void
+}
+
+function LiquidationPctEditor({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(String(value))
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { setDraft(String(value)) }, [value])
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const commit = () => {
+    const n = parseFloat(draft)
+    if (Number.isFinite(n)) onChange(n)
+    setOpen(false)
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-100 text-surface-600 hover:bg-surface-200 transition-colors"
+        title="Assumed sell-through percentage"
+      >
+        @ {value}%
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-30 bg-white border border-surface-200 rounded-lg shadow-lg p-3 w-44">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-1.5">
+            Sell-at % of market
+          </div>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number"
+              min={1}
+              max={100}
+              autoFocus
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') commit() }}
+              className="input-dark py-1 px-2 text-sm font-mono w-full"
+            />
+            <button onClick={commit} className="btn-primary text-[11px] px-2 py-1">OK</button>
+          </div>
+          <p className="text-[10px] text-surface-500 mt-1.5 leading-snug">
+            Assumes you sell at this percent of current market.
+          </p>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function formatCurrency(val: number): string {
@@ -24,9 +84,10 @@ interface StatCardProps {
   subValue?: string
   icon: React.ReactNode
   variant?: 'default' | 'gain' | 'loss' | 'accent'
+  headerExtra?: React.ReactNode
 }
 
-function StatCard({ label, value, subValue, icon, variant = 'default' }: StatCardProps) {
+function StatCard({ label, value, subValue, icon, variant = 'default', headerExtra }: StatCardProps) {
   const borderColor = {
     default: 'border-surface-200',
     gain: 'border-gain/20',
@@ -52,8 +113,11 @@ function StatCard({ label, value, subValue, icon, variant = 'default' }: StatCar
     <div className={`glass-card-subtle p-4 ${borderColor} transition-all duration-300 hover:border-opacity-50 group`}>
       <div className="flex items-start justify-between mb-3">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">{label}</span>
-        <div className={`p-1.5 rounded-lg ${iconBg} transition-transform duration-300 group-hover:scale-110`}>
-          {icon}
+        <div className="flex items-center gap-1.5">
+          {headerExtra}
+          <div className={`p-1.5 rounded-lg ${iconBg} transition-transform duration-300 group-hover:scale-110`}>
+            {icon}
+          </div>
         </div>
       </div>
       <div className={`text-xl font-bold font-mono ${valueColor} tabular-nums`}>{value}</div>
@@ -64,7 +128,7 @@ function StatCard({ label, value, subValue, icon, variant = 'default' }: StatCar
   )
 }
 
-export default function SummaryCards({ summary }: SummaryCardsProps) {
+export default function SummaryCards({ summary, liquidationPct, onLiquidationPctChange }: SummaryCardsProps) {
   const plVariant = summary.unrealizedPL >= 0 ? 'gain' : 'loss'
   const realizedVariant = summary.realizedGains >= 0 ? 'gain' : 'loss'
 
@@ -95,8 +159,9 @@ export default function SummaryCards({ summary }: SummaryCardsProps) {
       <StatCard
         label="Unrealized P&L"
         value={formatCurrency(summary.unrealizedPL)}
-        subValue={formatPercent(summary.unrealizedPLPercent)}
+        subValue={`${formatPercent(summary.unrealizedPLPercent)}`}
         variant={plVariant}
+        headerExtra={<LiquidationPctEditor value={liquidationPct} onChange={onLiquidationPctChange} />}
         icon={
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points={summary.unrealizedPL >= 0 ? "22 7 13.5 15.5 8.5 10.5 2 17" : "22 17 13.5 8.5 8.5 13.5 2 7"}/>
