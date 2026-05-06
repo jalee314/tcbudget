@@ -22,10 +22,10 @@ module.exports = {
           950: '#030712'
         },
         accent: {
-          DEFAULT: '#D4FF00',
-          light: '#E5FF4D',
-          dark: '#BCC600',
-          glow: 'rgba(212, 255, 0, 0.3)'
+          DEFAULT: '#22C55E',
+          light: '#4ADE80',
+          dark: '#16A34A',
+          glow: 'rgba(34, 197, 94, 0.3)'
         },
         gain: {
           DEFAULT: '#10B981',
@@ -63,8 +63,8 @@ module.exports = {
           '100%': { opacity: '1', transform: 'scale(1)' }
         },
         glowPulse: {
-          '0%, 100%': { boxShadow: '0 0 20px rgba(212, 255, 0, 0.2)' },
-          '50%': { boxShadow: '0 0 30px rgba(212, 255, 0, 0.4)' }
+          '0%, 100%': { boxShadow: '0 0 20px rgba(34, 197, 94, 0.2)' },
+          '50%': { boxShadow: '0 0 30px rgba(34, 197, 94, 0.4)' }
         }
       },
       backdropBlur: {

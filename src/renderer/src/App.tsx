@@ -4,6 +4,7 @@ import SummaryCards from './components/SummaryCards'
 import DataGrid from './components/DataGrid'
 import SearchModal from './components/SearchModal'
 import SellModal from './components/SellModal'
+import OpenModal from './components/OpenModal'
 import PulledFromEditor from './components/PulledFromEditor'
 import { InventoryCard, SearchCard, PortfolioSummary } from './types'
 import { v4 as uuidv4 } from 'uuid'
@@ -26,6 +27,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [activeParentFilter, setActiveParentFilter] = useState<string | null>(null)
   const [sellingCard, setSellingCard] = useState<InventoryCard | null>(null)
+  const [openingCard, setOpeningCard] = useState<InventoryCard | null>(null)
   const [editingPulledFromFor, setEditingPulledFromFor] = useState<InventoryCard | null>(null)
   const [liquidationPct, setLiquidationPct] = useState<number>(() => loadLiquidationPct())
 
@@ -79,8 +81,7 @@ export default function App() {
     const sold = inventory.filter(c => c.is_sold === 1)
 
     const totalCostBasis =
-      held.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0) +
-      opened.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
+      held.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
     // Opened sealed items have no resale value as sealed product — treated as $0 market value
     const totalMarketValue = held.reduce((sum, c) => sum + c.market_price * c.quantity, 0)
     const liquidationFactor = liquidationPct / 100
@@ -186,18 +187,91 @@ export default function App() {
 
   // ─── Toggle opened status (sealed items only) ────────────────────
   const handleToggleOpened = useCallback(async (card: InventoryCard) => {
-    const newStatus = card.is_opened ? 0 : 1
-    try {
+    if (card.is_opened) {
+      // Transitioning back to sealed - check if we can merge
+      const match = inventory.find(c =>
+        !c.is_opened &&
+        !c.is_sold &&
+        c.id !== card.id &&
+        c.card_id === card.card_id &&
+        c.purchase_price === card.purchase_price &&
+        c.condition === card.condition &&
+        c.variant_id === card.variant_id
+      )
+
+      if (match) {
+        try {
+          if (window.electronAPI) {
+            await window.electronAPI.db.update(match.id, 'quantity', match.quantity + card.quantity)
+            await window.electronAPI.db.delete(card.id)
+          }
+          setInventory(prev => prev.map(c =>
+            c.id === match.id ? { ...c, quantity: c.quantity + card.quantity } : c
+          ).filter(c => c.id !== card.id))
+        } catch (err) {
+          console.error('Failed to merge items:', err)
+        }
+      } else {
+        try {
+          if (window.electronAPI) {
+            await window.electronAPI.db.update(card.id, 'is_opened', 0)
+          }
+          setInventory(prev => prev.map(c =>
+            c.id === card.id ? { ...c, is_opened: 0 } : c
+          ))
+        } catch (err) {
+          console.error('Failed to toggle opened:', err)
+        }
+      }
+    } else {
+      // Transitioning to opened
+      if (card.quantity > 1) {
+        setOpeningCard(card)
+      } else {
+        try {
+          if (window.electronAPI) {
+            await window.electronAPI.db.update(card.id, 'is_opened', 1)
+          }
+          setInventory(prev => prev.map(c =>
+            c.id === card.id ? { ...c, is_opened: 1 } : c
+          ))
+        } catch (err) {
+          console.error('Failed to toggle opened:', err)
+        }
+      }
+    }
+  }, [inventory])
+
+  const handleConfirmOpen = useCallback((qtyOpened: number) => {
+    const card = openingCard
+    if (!card) return
+
+    if (qtyOpened >= card.quantity) {
       if (window.electronAPI) {
-        await window.electronAPI.db.update(card.id, 'is_opened', newStatus)
+        window.electronAPI.db.update(card.id, 'is_opened', 1).catch(console.error)
       }
       setInventory(prev => prev.map(c =>
-        c.id === card.id ? { ...c, is_opened: newStatus } : c
+        c.id === card.id ? { ...c, is_opened: 1 } : c
       ))
-    } catch (err) {
-      console.error('Failed to toggle opened:', err)
+    } else {
+      const remainingQty = card.quantity - qtyOpened
+      const openedRow: InventoryCard = {
+        ...card,
+        id: uuidv4(),
+        quantity: qtyOpened,
+        is_opened: 1
+      }
+      if (window.electronAPI) {
+        window.electronAPI.db.update(card.id, 'quantity', remainingQty).catch(console.error)
+        window.electronAPI.db.insert(openedRow as unknown as Record<string, unknown>).catch(console.error)
+      }
+      setInventory(prev => {
+        const updated = prev.map(c => c.id === card.id ? { ...c, quantity: remainingQty } : c)
+        return [openedRow, ...updated]
+      })
     }
-  }, [])
+    setOpeningCard(null)
+  }, [openingCard])
 
   // ─── Toggle sold status ───────────────────────────────────────────
   const handleToggleSold = useCallback(async (card: InventoryCard) => {
@@ -421,6 +495,11 @@ export default function App() {
         card={sellingCard}
         onClose={() => setSellingCard(null)}
         onConfirm={handleConfirmSale}
+      />
+      <OpenModal
+        card={openingCard}
+        onClose={() => setOpeningCard(null)}
+        onConfirm={handleConfirmOpen}
       />
       {editingPulledFromFor && (
         <PulledFromEditor

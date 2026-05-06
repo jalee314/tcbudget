@@ -16,9 +16,9 @@ const TOGGLEABLE_COLUMNS: { colId: string; label: string }[] = [
   { colId: 'rarity', label: 'Rarity' },
   { colId: 'condition', label: 'Condition' },
   { colId: 'quantity', label: 'Qty' },
-  { colId: 'market_price', label: 'Market Price' },
   { colId: 'price_change', label: 'Price Change' },
   { colId: 'market_value', label: 'Market Value' },
+  { colId: 'purchase_price', label: 'Unit Cost' },
   { colId: 'cost_basis', label: 'Cost Basis' },
   { colId: 'total_gl', label: 'Total G/L' },
   { colId: 'status', label: 'Status' },
@@ -26,8 +26,7 @@ const TOGGLEABLE_COLUMNS: { colId: string; label: string }[] = [
   { colId: 'purchase_date', label: 'Date' },
   { colId: 'notes', label: 'Notes' }
 ]
-
-const DEFAULT_HIDDEN: string[] = ['status', 'sale_price', 'purchase_date']
+const DEFAULT_HIDDEN: string[] = []
 
 type DisplayMode = '$' | '%'
 
@@ -141,22 +140,23 @@ function ConditionRenderer(props: ICellRendererParams<GridRow>) {
   return <span className="text-surface-700 text-xs font-medium">{data.condition || '—'}</span>
 }
 
-function MarketRenderer(props: ICellRendererParams<GridRow>) {
-  const data = props.data
-  if (!data) return null
-  return (
-    <span className="text-surface-900 font-medium text-sm font-mono">
-      {formatCurrency(data.market_price)}
-    </span>
-  )
-}
-
 function MarketValueRenderer(props: ICellRendererParams<GridRow>) {
   const data = props.data
   if (!data) return null
   return (
     <span className="text-surface-900 font-medium text-sm font-mono">
       {formatCurrency(data.market_price * data.quantity)}
+    </span>
+  )
+}
+
+function PurchasePriceRenderer(props: ICellRendererParams<GridRow>) {
+  const data = props.data
+  if (!data) return null
+  const isGroup = !!data.__isGroup
+  return (
+    <span className={`text-sm font-mono ${isGroup ? 'text-surface-500 italic' : 'text-surface-700'}`}>
+      {formatCurrency(data.purchase_price)}
     </span>
   )
 }
@@ -176,6 +176,9 @@ function makePriceChangeRenderer(getMode: () => DisplayMode) {
   return function PriceChangeRenderer(props: ICellRendererParams<GridRow>) {
     const data = props.data
     if (!data) return null
+    if (data.is_opened === 1 && !data.is_sold) {
+      return <span className="text-surface-300">—</span>
+    }
     // Price change uses a baseline snapshotted at add time so newly added items
     // show 0. Updates only when market_price refreshes (throttled to ~12h).
     const baseline = data.price_change_baseline ?? data.market_price
@@ -198,6 +201,9 @@ function makeTotalGLRenderer(getMode: () => DisplayMode) {
   return function TotalGLRenderer(props: ICellRendererParams<GridRow>) {
     const data = props.data
     if (!data) return null
+    if (data.is_opened === 1 && !data.is_sold) {
+      return <span className="text-surface-300">—</span>
+    }
     const gl = (data.market_price - data.purchase_price) * data.quantity
     const isPositive = gl >= 0
     const pct = data.purchase_price > 0
@@ -596,20 +602,6 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       cellClass: 'text-center font-mono'
     },
     {
-      headerName: 'Market Price',
-      colId: 'market_price',
-      field: 'market_price',
-      width: 120,
-      minWidth: 100,
-      hide: hiddenColumns.has('market_price'),
-      cellRenderer: MarketRenderer,
-      tooltipValueGetter: (params) => {
-        const d = params.data
-        if (!d) return ''
-        return `Unit ${formatCurrency(d.market_price)}`
-      }
-    },
-    {
       headerName: 'PRICE CHANGE',
       colId: 'price_change',
       width: 130,
@@ -644,6 +636,18 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
         const b = nodeB.data ? nodeB.data.market_price * nodeB.data.quantity : 0
         return a - b
       }
+    },
+    {
+      headerName: 'Unit Cost',
+      colId: 'purchase_price',
+      field: 'purchase_price',
+      width: 100,
+      minWidth: 90,
+      hide: hiddenColumns.has('purchase_price'),
+      editable: (params) => !params.data?.__isGroup,
+      cellDataType: 'number',
+      cellRenderer: PurchasePriceRenderer,
+      sortable: true
     },
     {
       headerName: 'COST BASIS',
@@ -769,7 +773,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       const newVal = event.newValue as string
       const newOpened = newVal === 'Opened' ? 1 : 0
       if ((event.data.is_opened ?? 0) !== newOpened) {
-        onCellValueChanged(event.data.id, 'is_opened', newOpened)
+        onToggleOpened(event.data)
       }
       // Don't write Sealed/Opened into the condition column itself.
       event.api.refreshCells({ rowNodes: [event.node], force: true })
@@ -780,7 +784,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       onCellValueChanged(event.data.id, event.colDef.field, event.newValue)
       event.api.refreshCells({ rowNodes: [event.node], force: true })
     }
-  }, [onCellValueChanged])
+  }, [onCellValueChanged, onToggleOpened])
 
   const onFilterTextChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setFilterText(e.target.value)
