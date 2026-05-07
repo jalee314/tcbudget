@@ -803,10 +803,6 @@ function PulledCard({ card, rare, interactive }: { card: InventoryCard; rare: bo
           })()}
         />
       )}
-      <div className="absolute inset-x-0 bottom-0 p-1.5 bg-gradient-to-t from-black/85 via-black/50 to-transparent">
-        <p className="text-[10px] font-semibold text-white truncate leading-tight">{card.name}</p>
-        <p className="text-[10px] text-white/70 font-mono leading-tight">{formatCurrency(card.market_price)}</p>
-      </div>
     </div>
   )
 }
