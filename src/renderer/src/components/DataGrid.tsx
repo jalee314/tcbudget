@@ -5,7 +5,8 @@ import {
   CellValueChangedEvent,
   ICellRendererParams,
   IHeaderParams,
-  GridReadyEvent
+  GridReadyEvent,
+  RowDragEndEvent
 } from 'ag-grid-community'
 import { InventoryCard } from '../types'
 
@@ -47,6 +48,7 @@ interface DataGridProps {
   onToggleOpened: (card: InventoryCard) => void
   onViewContents?: (id: string) => void
   onEditPulledFrom?: (card: InventoryCard) => void
+  onReorder?: (orderedIds: string[]) => void
 }
 
 // ─── Custom Cell Renderers ──────────────────────────────────────────────
@@ -76,8 +78,8 @@ function CardNameRenderer(props: ICellRendererParams<GridRow> & { onToggleGroup?
           <polyline points="9 18 15 12 9 6" />
         </svg>
         {data.image_url && (
-          <div className="w-8 h-11 rounded overflow-hidden flex-shrink-0 bg-surface-200">
-            <img src={data.image_url} alt={data.name} className="w-full h-full object-cover" loading="lazy" />
+          <div className="w-8 h-11 rounded overflow-hidden flex-shrink-0">
+            <img src={data.image_url} alt={data.name} className="w-full h-full object-contain" loading="lazy" />
           </div>
         )}
         <div className="flex-1 min-w-0">
@@ -96,11 +98,11 @@ function CardNameRenderer(props: ICellRendererParams<GridRow> & { onToggleGroup?
   return (
     <div className={`flex items-center gap-3 overflow-hidden w-full ${data.__inGroup ? 'pl-6' : ''}`}>
       {data.image_url && (
-        <div className="w-8 h-11 rounded overflow-hidden flex-shrink-0 bg-surface-200">
+        <div className="w-8 h-11 rounded overflow-hidden flex-shrink-0">
           <img
             src={data.image_url}
             alt={data.name}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
             loading="lazy"
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = 'none'
@@ -386,7 +388,7 @@ function formatCurrency(val: number): string {
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
-export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onToggleSold, onToggleOpened, onViewContents, onEditPulledFrom }: DataGridProps) {
+export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onToggleSold, onToggleOpened, onViewContents, onEditPulledFrom, onReorder }: DataGridProps) {
   const gridRef = useRef<AgGridReact>(null)
   const gridWrapperRef = useRef<HTMLDivElement>(null)
   const [filterText, setFilterText] = useState('')
@@ -544,6 +546,17 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
     return out
   }, [filteredByType, expandedGroups, rowOrder])
 
+  const handleRowDragEnd = useCallback((event: RowDragEndEvent<GridRow>) => {
+    if (!onReorder) return
+    const orderedIds: string[] = []
+    event.api.forEachNodeAfterFilterAndSort(node => {
+      if (node.data && !node.data.__isGroup && !node.data.__inGroup) {
+        orderedIds.push(node.data.id)
+      }
+    })
+    onReorder(orderedIds)
+  }, [onReorder])
+
   const priceChangeRenderer = useMemo(() => makePriceChangeRenderer(() => priceChangeMode), [priceChangeMode])
   const totalGLRenderer = useMemo(() => makeTotalGLRenderer(() => totalGLMode), [totalGLMode])
 
@@ -554,6 +567,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       field: 'name',
       cellRenderer: CardNameRenderer,
       cellRendererParams: { onToggleGroup: toggleGroup },
+      rowDrag: (params) => !params.data?.__inGroup,
       width: 220,
       minWidth: 160,
       filter: false,
@@ -900,6 +914,8 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
             onCellValueChanged={handleCellValueChanged}
             onGridReady={handleGridReady}
             onGridSizeChanged={handleGridSizeChanged}
+            onRowDragEnd={handleRowDragEnd}
+            rowDragManaged={true}
             pagination={false}
             getRowId={(params) => params.data.id}
             domLayout="normal"

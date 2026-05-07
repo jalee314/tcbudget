@@ -5,7 +5,10 @@
       "Bash(node -e \"console.log\\(require\\('./node_modules/better-sqlite3/package.json'\\).version\\)\")",
       "Bash(node -e \"console.log\\(require\\('./node_modules/@types/better-sqlite3/package.json'\\).version\\)\")",
       "Bash(npx tsc *)",
-      "Bash(xargs grep -l \"justtcg\\\\|searchSealed\")"
+      "Bash(xargs grep -l \"justtcg\\\\|searchSealed\")",
+      "Bash(awk 'NR<833 || NR>1009' src/renderer/src/components/PackOpenAnimation.tsx)",
+      "Bash(mv tmp.tsx src/renderer/src/components/PackOpenAnimation.tsx)",
+      "Bash(awk 'NR<592 || NR>869' src/renderer/src/components/PackOpenAnimation.tsx)"
     ]
   }
 }

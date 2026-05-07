@@ -276,7 +276,25 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
           setCardResults([])
         } else {
           const cardsOnly = (res.data as any[]).filter(raw => !isSealedResult(raw))
-          setCardResults(cardsOnly.map(mapJustTCGCard))
+          const mapped = cardsOnly.map(mapJustTCGCard)
+          
+          // Check if query matches any set names in results
+          const queryLower = cardQuery.toLowerCase().trim()
+          const matchingSetNames = new Set<string>()
+          
+          for (const card of mapped) {
+            if (card.set_name.toLowerCase().includes(queryLower)) {
+              matchingSetNames.add(card.set_name)
+            }
+          }
+          
+          // If set names were matched, filter results to only show cards from those sets
+          if (matchingSetNames.size > 0) {
+            const filteredBySet = mapped.filter(card => matchingSetNames.has(card.set_name))
+            setCardResults(filteredBySet)
+          } else {
+            setCardResults(mapped)
+          }
         }
       } catch (err: any) {
         setSearchError(err?.message ?? 'Search failed')
@@ -412,11 +430,11 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
       <div className="flex gap-6">
         <div className="w-40 flex-shrink-0">
           {selectedItem.type === 'card' ? (
-            <div className="rounded-xl overflow-hidden bg-surface-200 shadow-sm border border-surface-200">
+            <div className="rounded-xl overflow-hidden bg-surface-200 shadow-sm">
               <img src={selectedItem.data.image_url} alt={selectedItem.data.name} className="w-full" />
             </div>
           ) : (
-            <div className="rounded-xl overflow-hidden bg-surface-200 shadow-sm border border-surface-200">
+            <div className="rounded-xl overflow-hidden bg-surface-200 shadow-sm">
               {selectedItem.data.image_url ? (
                 <img src={selectedItem.data.image_url} alt={selectedItem.data.name} className="w-full" />
               ) : (
@@ -660,7 +678,7 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                           className="flex items-center gap-3 p-3 rounded-lg text-left w-full hover:bg-surface-50 border border-transparent hover:border-surface-200 transition-all duration-200 group"
                         >
                           <div className="w-10 h-14 rounded-md overflow-hidden flex-shrink-0 bg-surface-200">
-                            <img src={card.image_url} alt={card.name} className="w-full h-full object-cover" loading="lazy" />
+                            <img src={card.image_url} alt={card.name} className="w-full h-full object-contain" loading="lazy" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium text-surface-900 group-hover:text-black truncate">{card.name}</div>

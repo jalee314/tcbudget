@@ -6,12 +6,30 @@ import SearchModal from './components/SearchModal'
 import SellModal from './components/SellModal'
 import OpenModal from './components/OpenModal'
 import PulledFromEditor from './components/PulledFromEditor'
+import PackOpenAnimation from './components/PackOpenAnimation'
 import { InventoryCard, SearchCard, PortfolioSummary } from './types'
 import { v4 as uuidv4 } from 'uuid'
 
 const LIQUIDATION_PCT_KEY = 'liquidation_pct_v1'
 const LAST_AUTO_REFRESH_KEY = 'last_auto_refresh_at'
+const ROW_ORDER_KEY = 'inventory_row_order_v1'
 const AUTO_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000 // 12 hours
+
+function applySavedOrder(rows: InventoryCard[]): InventoryCard[] {
+  const raw = localStorage.getItem(ROW_ORDER_KEY)
+  if (!raw) return rows
+  try {
+    const savedIds: string[] = JSON.parse(raw)
+    const idToIndex = new Map(savedIds.map((id, i) => [id, i]))
+    return [...rows].sort((a, b) => {
+      const ia = idToIndex.has(a.id) ? idToIndex.get(a.id)! : -1
+      const ib = idToIndex.has(b.id) ? idToIndex.get(b.id)! : -1
+      return ia - ib
+    })
+  } catch {
+    return rows
+  }
+}
 
 function loadLiquidationPct(): number {
   const raw = localStorage.getItem(LIQUIDATION_PCT_KEY)
@@ -29,6 +47,7 @@ export default function App() {
   const [sellingCard, setSellingCard] = useState<InventoryCard | null>(null)
   const [openingCard, setOpeningCard] = useState<InventoryCard | null>(null)
   const [editingPulledFromFor, setEditingPulledFromFor] = useState<InventoryCard | null>(null)
+  const [ripAnimationParent, setRipAnimationParent] = useState<InventoryCard | null>(null)
   const [liquidationPct, setLiquidationPct] = useState<number>(() => loadLiquidationPct())
 
   const updateLiquidationPct = useCallback((value: number) => {
@@ -60,7 +79,7 @@ export default function App() {
               row.price_change_baseline = baseline
             }
           }
-          setInventory(rows)
+          setInventory(applySavedOrder(rows))
         } else {
           setInventory([])
         }
@@ -81,12 +100,15 @@ export default function App() {
     const sold = inventory.filter(c => c.is_sold === 1)
 
     const totalCostBasis =
-      held.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
+      held.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0) +
+      opened.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0) +
+      sold.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
     // Opened sealed items have no resale value as sealed product — treated as $0 market value
     const totalMarketValue = held.reduce((sum, c) => sum + c.market_price * c.quantity, 0)
+    const heldCostBasis = held.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
     const liquidationFactor = liquidationPct / 100
-    const unrealizedPL = totalMarketValue * liquidationFactor - totalCostBasis
-    const unrealizedPLPercent = totalCostBasis > 0 ? (unrealizedPL / totalCostBasis) * 100 : 0
+    const unrealizedPL = totalMarketValue * liquidationFactor - heldCostBasis
+    const unrealizedPLPercent = heldCostBasis > 0 ? (unrealizedPL / heldCostBasis) * 100 : 0
     const realizedGains =
       sold.reduce((sum, c) => sum + c.sale_price - (c.purchase_price * c.quantity), 0) -
       opened.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
@@ -111,6 +133,17 @@ export default function App() {
       openedCost
     }
   }, [inventory, liquidationPct])
+
+  // ─── Row reorder ──────────────────────────────────────────────────
+  const handleReorder = useCallback((orderedIds: string[]) => {
+    localStorage.setItem(ROW_ORDER_KEY, JSON.stringify(orderedIds))
+    const idToIndex = new Map(orderedIds.map((id, i) => [id, i]))
+    setInventory(prev => [...prev].sort((a, b) => {
+      const ia = idToIndex.has(a.id) ? idToIndex.get(a.id)! : -1
+      const ib = idToIndex.has(b.id) ? idToIndex.get(b.id)! : -1
+      return ia - ib
+    }))
+  }, [])
 
   // ─── Cell edit handler (auto-save) ─────────────────────────────────
   const handleCellValueChanged = useCallback(async (id: string, field: string, value: unknown) => {
@@ -481,8 +514,12 @@ export default function App() {
           onDeleteRow={handleDeleteRow}
           onToggleSold={handleToggleSold}
           onToggleOpened={handleToggleOpened}
-          onViewContents={setActiveParentFilter}
+          onViewContents={(id) => {
+            const parent = inventory.find(c => c.id === id)
+            if (parent) setRipAnimationParent(parent)
+          }}
           onEditPulledFrom={(card) => setEditingPulledFromFor(card)}
+          onReorder={handleReorder}
         />
       </div>
       <SearchModal
@@ -501,6 +538,17 @@ export default function App() {
         onClose={() => setOpeningCard(null)}
         onConfirm={handleConfirmOpen}
       />
+      {ripAnimationParent && (
+        <PackOpenAnimation
+          parentItem={ripAnimationParent}
+          cards={inventory.filter(c => c.parent_id === ripAnimationParent.id)}
+          onClose={() => setRipAnimationParent(null)}
+          onViewAsList={() => {
+            setActiveParentFilter(ripAnimationParent.id)
+            setRipAnimationParent(null)
+          }}
+        />
+      )}
       {editingPulledFromFor && (
         <PulledFromEditor
           card={editingPulledFromFor}

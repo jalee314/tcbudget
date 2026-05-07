@@ -254,3 +254,505 @@ body {
 .ambient-bg {
   display: none; /* Removed for light mode clean look */
 }
+
+/* ─── Pack Open Animation ─────────────────────────────────────────────── */
+.pack-open-bg {
+  background:
+    radial-gradient(ellipse at center, rgba(34, 197, 94, 0.18) 0%, rgba(0, 0, 0, 0) 55%),
+    radial-gradient(ellipse at center, rgba(17, 24, 39, 0.92) 0%, rgba(0, 0, 0, 0.96) 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.pack-wrap {
+  position: relative;
+  /* Real Pokémon booster pack ratio is roughly 1 : 1.85 */
+  width: 250px;
+  height: 462px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pack-enter {
+  animation: packEnter 350ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.pack-shake {
+  animation: packShake 320ms ease-in-out both;
+}
+
+.pack-drop {
+  animation: packDrop 700ms cubic-bezier(0.55, 0, 0.55, 1) both;
+}
+
+.pack-glow {
+  position: absolute;
+  inset: -40px;
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.45) 0%, rgba(34, 197, 94, 0) 65%);
+  filter: blur(12px);
+  animation: packGlowPulse 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.pack-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  overflow: visible;
+  filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.6));
+}
+
+.pack-half {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: transform 600ms cubic-bezier(0.5, 0, 0.2, 1), opacity 600ms ease-out;
+  will-change: transform, opacity;
+}
+
+.pack-art-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  /* Slight overfill — TCGplayer source images have a small amount of
+     background padding around the product. Scaling up by a hair crops
+     that out so the pack edges sit flush against the frame. */
+  transform: scale(1.05);
+  transform-origin: center;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* ─── Procedural Booster Pack Art ─────────────────────────────────────── */
+.pack-art {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg,
+      transparent 0%, transparent 13%,
+      hsl(var(--pack-hue), 35%, 14%) 13%,
+      hsl(var(--pack-hue), 38%, 9%) 100%);
+  overflow: hidden;
+}
+
+.pack-foil {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 13%;
+  background:
+    linear-gradient(180deg,
+      hsl(var(--pack-hue), 60%, 70%) 0%,
+      hsl(var(--pack-hue), 70%, 55%) 50%,
+      hsl(var(--pack-hue), 80%, 45%) 100%);
+  box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.pack-foil-shimmer {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 13%;
+  background: linear-gradient(
+    115deg,
+    transparent 25%,
+    rgba(255, 255, 255, 0.55) 45%,
+    rgba(255, 255, 255, 0.0) 65%,
+    rgba(255, 255, 255, 0.4) 78%,
+    transparent 90%
+  );
+  background-size: 200% 100%;
+  mix-blend-mode: screen;
+  animation: foilShimmer 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.pack-body {
+  position: absolute;
+  top: 13%;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 22px 14px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.95);
+  overflow: hidden;
+}
+
+.pack-pokemon-mark {
+  color: hsl(var(--pack-hue), 85%, 75%);
+  margin-top: 4px;
+  filter: drop-shadow(0 0 6px hsl(var(--pack-hue), 85%, 50%));
+}
+
+.pack-pokemon-text {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.25em;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.pack-divider {
+  width: 60%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, hsl(var(--pack-hue), 70%, 55%), transparent);
+  margin: 8px 0;
+}
+
+.pack-set-name-text {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: white;
+  text-shadow: 0 1px 8px hsl(var(--pack-hue), 80%, 40%);
+  /* Allow up to 3 lines, then ellipsis */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+.pack-booster-text {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: auto;
+  margin-bottom: 4px;
+}
+
+.pack-sparkle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: white;
+  filter: blur(0.5px);
+  box-shadow: 0 0 8px white, 0 0 12px hsl(var(--pack-hue), 90%, 70%);
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.pack-sparkle-1 {
+  top: 20%;
+  left: 18%;
+  animation: sparkleTwinkle 2.4s ease-in-out infinite;
+}
+
+.pack-sparkle-2 {
+  bottom: 22%;
+  right: 22%;
+  animation: sparkleTwinkle 2.8s ease-in-out 0.6s infinite;
+}
+
+@keyframes foilShimmer {
+  0% { background-position: -100% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes sparkleTwinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.6); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.detail-card-image {
+  animation: detailCardIn 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.detail-info-fade {
+  animation: detailInfoIn 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes detailCardIn {
+  0% { opacity: 0; transform: translateX(-16px) scale(0.96); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes detailInfoIn {
+  0% { opacity: 0; transform: translateX(16px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+/* ─── Inline focus view ─────────────────────────────────────────────── */
+
+/* Hero card animations — pop on first open, slide in on cycle */
+.focus-hero-pop {
+  animation: focusHeroPop 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.focus-hero-from-right {
+  animation: focusHeroFromRight 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.focus-hero-from-left {
+  animation: focusHeroFromLeft 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Info panel animations — fade in on first open, slide in on cycle */
+.focus-info-fade {
+  animation: focusInfoFade 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.focus-info-from-right {
+  animation: focusInfoFromRight 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.focus-info-from-left {
+  animation: focusInfoFromLeft 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes focusHeroPop {
+  0% { opacity: 0; transform: scale(0.4); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes focusHeroFromRight {
+  0% { opacity: 0; transform: translateX(80px) scale(0.92); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes focusHeroFromLeft {
+  0% { opacity: 0; transform: translateX(-80px) scale(0.92); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes focusInfoFade {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes focusInfoFromRight {
+  0% { opacity: 0; transform: translateX(48px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes focusInfoFromLeft {
+  0% { opacity: 0; transform: translateX(-48px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+/* Thumbnail strip — keep horizontal scroll smooth, hide native scrollbar */
+.focus-thumb-strip {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+.focus-thumb-strip::-webkit-scrollbar {
+  height: 6px;
+}
+.focus-thumb-strip::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+/* ─── Info panel staggered reveal ────────────────────────────────────── */
+
+/* Each direct child starts hidden, slightly offset (vertically + along
+   the navigation direction). The .is-visible class triggers the fade /
+   slide; nth-child rules cascade the delay so the rows reveal in
+   sequence rather than all at once. */
+.info-panel-reveal > * {
+  opacity: 0;
+  transform: translate(var(--info-slide-from, 0px), 10px);
+  transition:
+    opacity 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.info-panel-reveal.is-visible > * {
+  opacity: 1;
+  transform: translate(0, 0);
+}
+
+.info-panel-reveal.is-visible > *:nth-child(1) { transition-delay: 0ms; }
+.info-panel-reveal.is-visible > *:nth-child(2) { transition-delay: 60ms; }
+.info-panel-reveal.is-visible > *:nth-child(3) { transition-delay: 120ms; }
+.info-panel-reveal.is-visible > *:nth-child(4) { transition-delay: 180ms; }
+.info-panel-reveal.is-visible > *:nth-child(5) { transition-delay: 240ms; }
+.info-panel-reveal.is-visible > *:nth-child(6) { transition-delay: 300ms; }
+.info-panel-reveal.is-visible > *:nth-child(n+7) { transition-delay: 340ms; }
+
+.pack-top {
+  top: 0;
+  z-index: 2;
+  /* Only the top sliver (~12% of height) — that's the part you actually tear off */
+  clip-path: polygon(
+    0 0, 100% 0, 100% 11%,
+    96% 13%, 90% 10%, 84% 13%, 78% 11%, 72% 14%, 66% 11%,
+    60% 13%, 54% 11%, 48% 14%, 42% 11%, 36% 13%, 30% 11%,
+    24% 14%, 18% 11%, 12% 13%, 6% 11%, 0 13%
+  );
+}
+
+.pack-top-rip {
+  transform: translate(-30%, -180%) rotate(-28deg);
+  opacity: 0;
+}
+
+.pack-bottom {
+  top: 0;
+  z-index: 1;
+  /* Body — everything below the tear line stays in place */
+  clip-path: polygon(
+    0 13%, 6% 11%, 12% 13%, 18% 11%, 24% 14%, 30% 11%,
+    36% 13%, 42% 11%, 48% 14%, 54% 11%, 60% 13%, 66% 11%,
+    72% 14%, 78% 11%, 84% 13%, 90% 10%, 96% 13%, 100% 11%,
+    100% 100%, 0 100%
+  );
+}
+
+/* Dark "inside the pack" visible at the torn opening */
+.pack-opening {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: 11%;
+  height: 5%;
+  background: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.6) 80%, transparent 100%);
+  border-radius: 2px;
+  z-index: 3;
+  pointer-events: none;
+  filter: blur(1px);
+}
+
+.pack-rip-line {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  top: 11%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, #FCD34D 20%, #FFFFFF 50%, #FCD34D 80%, transparent 100%);
+  filter: blur(1px);
+  box-shadow: 0 0 16px rgba(252, 211, 77, 0.9), 0 0 32px rgba(252, 211, 77, 0.6);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.pack-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #16A34A 0%, #15803D 100%);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.pack-flash {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.3) 25%, rgba(255, 255, 255, 0) 60%);
+  pointer-events: none;
+  z-index: 5;
+  mix-blend-mode: screen;
+}
+
+.pulled-card-fan {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 10px;
+  will-change: transform, opacity;
+}
+
+.pulled-card-rare {
+  box-shadow:
+    0 0 0 1px rgba(252, 211, 77, 0.5),
+    0 0 24px rgba(252, 211, 77, 0.35),
+    0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.pulled-card-interactive {
+  transition: transform 200ms ease-out, box-shadow 200ms ease-out;
+}
+
+button:hover > .pulled-card-interactive {
+  transform: translateY(-6px) scale(1.04);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.2),
+    0 16px 40px rgba(0, 0, 0, 0.6);
+}
+
+button:hover > .pulled-card-interactive.pulled-card-rare {
+  box-shadow:
+    0 0 0 1px rgba(252, 211, 77, 0.7),
+    0 0 32px rgba(252, 211, 77, 0.5),
+    0 18px 44px rgba(0, 0, 0, 0.6);
+}
+
+.pulled-card-shine {
+  position: absolute;
+  inset: 0;
+  /* Narrow diagonal streak — short bright band with hard transparent
+     edges so the gleam reads as a sharp light reflection rather than
+     a wide gradient wash. */
+  background: linear-gradient(
+    var(--shine-angle, 118deg),
+    transparent 46%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 54%
+  );
+  background-size: 250% 250%;
+  background-repeat: no-repeat;
+  /* Linear keeps the streak moving at a constant pace as it crosses the
+     card — easing made the visible portion of the sweep feel rushed. */
+  animation: cardShine var(--shine-duration, 7s) linear infinite;
+  animation-delay: var(--shine-delay, 0s);
+  mix-blend-mode: screen;
+  border-radius: inherit;
+}
+
+@keyframes packEnter {
+  0% { transform: scale(0.6) translateY(40px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+@keyframes packShake {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  20% { transform: translateX(-6px) rotate(-1.5deg); }
+  40% { transform: translateX(6px) rotate(1.5deg); }
+  60% { transform: translateX(-4px) rotate(-1deg); }
+  80% { transform: translateX(4px) rotate(1deg); }
+}
+
+@keyframes packDrop {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  20% {
+    transform: translateY(40px) rotate(-3deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(120vh) rotate(-12deg);
+    opacity: 0.85;
+  }
+}
+
+@keyframes packGlowPulse {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes cardShine {
+  /* Sweep takes ~45% of the loop. Combined with the longer per-card
+     durations, the visible streak now drifts across the card slowly
+     enough to read as a deliberate reflection. The remaining 55% holds
+     the streak off-screen so the card sits idle between gleams. */
+  0% { background-position: 220% 220%; }
+  45% { background-position: -120% -120%; }
+  100% { background-position: -120% -120%; }
+}
