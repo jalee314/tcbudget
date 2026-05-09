@@ -1,9 +1,9 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import Database from 'better-sqlite3'
 import { v4 as uuidv4 } from 'uuid'
-import { existsSync, writeFileSync } from 'fs'
+import { existsSync, writeFileSync, copyFileSync, unlinkSync } from 'fs'
 import { JustTCG } from 'justtcg-js'
 import { TTLCache } from './cache'
 
@@ -100,6 +100,12 @@ function initDatabase(): void {
   } catch (err) {
     // Column might already exist
   }
+
+  try {
+    db.exec(`ALTER TABLE inventory ADD COLUMN is_kept INTEGER DEFAULT 0`)
+  } catch (err) {
+    // Column might already exist
+  }
 }
 
 // ─── IPC Handlers ───────────────────────────────────────────────────────────
@@ -114,8 +120,8 @@ function setupIPC(): void {
   ipcMain.handle('db:insert', (_event, card: Record<string, unknown>) => {
     const id = card.id || uuidv4()
     const stmt = db.prepare(`
-      INSERT INTO inventory (id, card_id, name, set_name, set_id, card_number, rarity, image_url, purchase_price, purchase_date, quantity, condition, market_price, last_updated, is_sold, sale_price, sale_date, notes, item_type, parent_id, is_opened, variant_id, price_change_baseline)
-      VALUES (@id, @card_id, @name, @set_name, @set_id, @card_number, @rarity, @image_url, @purchase_price, @purchase_date, @quantity, @condition, @market_price, @last_updated, @is_sold, @sale_price, @sale_date, @notes, @item_type, @parent_id, @is_opened, @variant_id, @price_change_baseline)
+      INSERT INTO inventory (id, card_id, name, set_name, set_id, card_number, rarity, image_url, purchase_price, purchase_date, quantity, condition, market_price, last_updated, is_sold, sale_price, sale_date, notes, item_type, parent_id, is_opened, variant_id, price_change_baseline, is_kept)
+      VALUES (@id, @card_id, @name, @set_name, @set_id, @card_number, @rarity, @image_url, @purchase_price, @purchase_date, @quantity, @condition, @market_price, @last_updated, @is_sold, @sale_price, @sale_date, @notes, @item_type, @parent_id, @is_opened, @variant_id, @price_change_baseline, @is_kept)
     `)
 
     const now = new Date().toISOString()
@@ -142,7 +148,8 @@ function setupIPC(): void {
       parent_id: card.parent_id || null,
       is_opened: card.is_opened || 0,
       variant_id: card.variant_id || null,
-      price_change_baseline: card.price_change_baseline ?? card.market_price ?? 0
+      price_change_baseline: card.price_change_baseline ?? card.market_price ?? 0,
+      is_kept: card.is_kept || 0
     })
 
     return { id, ...card }
@@ -155,7 +162,7 @@ function setupIPC(): void {
       'purchase_price', 'purchase_date', 'quantity', 'condition',
       'market_price', 'is_sold', 'sale_price', 'sale_date', 'notes',
       'name', 'set_name', 'last_updated', 'item_type', 'parent_id', 'is_opened', 'variant_id',
-      'price_change_baseline'
+      'price_change_baseline', 'is_kept'
     ]
 
     if (!allowedFields.includes(field)) {
@@ -198,11 +205,123 @@ function setupIPC(): void {
     return { success: true, path: filePath }
   })
 
+  // Export DB file — copies the live SQLite DB to a user-chosen path.
+  // Use this to back up or move data to another device.
+  ipcMain.handle('db:exportDb', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return { success: false, message: 'Window not found' }
+
+    const today = new Date().toISOString().split('T')[0]
+    const result = await dialog.showSaveDialog(win, {
+      title: 'Export Database',
+      defaultPath: `tcbudget-${today}.db`,
+      filters: [{ name: 'TCBudget Database', extensions: ['db'] }]
+    })
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, message: 'Cancelled' }
+    }
+
+    try {
+      // Flush WAL into the main file so the copy is a complete, standalone DB.
+      db.pragma('wal_checkpoint(TRUNCATE)')
+      const dbPath = join(app.getPath('userData'), 'tcbudget.db')
+      copyFileSync(dbPath, result.filePath)
+      shell.showItemInFolder(result.filePath)
+      return { success: true, path: result.filePath }
+    } catch (err: any) {
+      console.error('[db:exportDb]', err?.message)
+      return { success: false, message: err?.message ?? 'Export failed' }
+    }
+  })
+
+  // Import DB file — replaces the current database with a chosen .db file.
+  // Backs up the current DB first so the action is recoverable.
+  ipcMain.handle('db:importDb', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return { success: false, message: 'Window not found' }
+
+    const open = await dialog.showOpenDialog(win, {
+      title: 'Import Database',
+      properties: ['openFile'],
+      filters: [{ name: 'TCBudget Database', extensions: ['db'] }]
+    })
+
+    if (open.canceled || open.filePaths.length === 0) {
+      return { success: false, message: 'Cancelled' }
+    }
+
+    const sourcePath = open.filePaths[0]
+    const dbPath = join(app.getPath('userData'), 'tcbudget.db')
+
+    if (sourcePath === dbPath) {
+      return { success: false, message: 'Cannot import the active database file' }
+    }
+
+    // Validate the source is a TCBudget DB before touching anything.
+    try {
+      const testDb = new Database(sourcePath, { readonly: true, fileMustExist: true })
+      try {
+        testDb.prepare('SELECT id FROM inventory LIMIT 1').get()
+      } finally {
+        testDb.close()
+      }
+    } catch (err: any) {
+      return { success: false, message: `Not a valid TCBudget database: ${err?.message ?? 'unknown error'}` }
+    }
+
+    const confirm = await dialog.showMessageBox(win, {
+      type: 'warning',
+      title: 'Replace current data?',
+      message: 'Importing will replace your current collection with the selected database.',
+      detail: 'Your current data will be backed up automatically before being replaced.',
+      buttons: ['Cancel', 'Replace'],
+      defaultId: 0,
+      cancelId: 0
+    })
+
+    if (confirm.response !== 1) {
+      return { success: false, message: 'Cancelled' }
+    }
+
+    const backupPath = join(app.getPath('userData'), `tcbudget-backup-${Date.now()}.db`)
+
+    try {
+      // Snapshot current DB before swapping it out.
+      db.pragma('wal_checkpoint(TRUNCATE)')
+      copyFileSync(dbPath, backupPath)
+      db.close()
+
+      // Remove leftover WAL/SHM that belong to the old DB before copying the new one in.
+      const walPath = dbPath + '-wal'
+      const shmPath = dbPath + '-shm'
+      if (existsSync(walPath)) unlinkSync(walPath)
+      if (existsSync(shmPath)) unlinkSync(shmPath)
+
+      copyFileSync(sourcePath, dbPath)
+
+      db = new Database(dbPath)
+      db.pragma('journal_mode = WAL')
+
+      return { success: true, backupPath }
+    } catch (err: any) {
+      console.error('[db:importDb]', err?.message)
+      // Try to recover by reopening whatever DB file is currently in place.
+      try {
+        db = new Database(dbPath)
+        db.pragma('journal_mode = WAL')
+      } catch (reopenErr) {
+        console.error('[db:importDb] reopen failed', reopenErr)
+      }
+      return { success: false, message: err?.message ?? 'Import failed' }
+    }
+  })
+
   // Bulk insert (for seeding mock data)
   ipcMain.handle('db:bulkInsert', (_event, cards: Record<string, unknown>[]) => {
     const stmt = db.prepare(`
-      INSERT OR IGNORE INTO inventory (id, card_id, name, set_name, set_id, card_number, rarity, image_url, purchase_price, purchase_date, quantity, condition, market_price, last_updated, is_sold, sale_price, sale_date, notes, item_type, parent_id, is_opened, variant_id, price_change_baseline)
-      VALUES (@id, @card_id, @name, @set_name, @set_id, @card_number, @rarity, @image_url, @purchase_price, @purchase_date, @quantity, @condition, @market_price, @last_updated, @is_sold, @sale_price, @sale_date, @notes, @item_type, @parent_id, @is_opened, @variant_id, @price_change_baseline)
+      INSERT OR IGNORE INTO inventory (id, card_id, name, set_name, set_id, card_number, rarity, image_url, purchase_price, purchase_date, quantity, condition, market_price, last_updated, is_sold, sale_price, sale_date, notes, item_type, parent_id, is_opened, variant_id, price_change_baseline, is_kept)
+      VALUES (@id, @card_id, @name, @set_name, @set_id, @card_number, @rarity, @image_url, @purchase_price, @purchase_date, @quantity, @condition, @market_price, @last_updated, @is_sold, @sale_price, @sale_date, @notes, @item_type, @parent_id, @is_opened, @variant_id, @price_change_baseline, @is_kept)
     `)
 
     const insertMany = db.transaction((items: Record<string, unknown>[]) => {
@@ -231,7 +350,8 @@ function setupIPC(): void {
           parent_id: card.parent_id || null,
           is_opened: card.is_opened || 0,
           variant_id: card.variant_id || null,
-          price_change_baseline: card.price_change_baseline ?? card.market_price ?? 0
+          price_change_baseline: card.price_change_baseline ?? card.market_price ?? 0,
+          is_kept: card.is_kept || 0
         })
       }
     })
@@ -244,6 +364,26 @@ function setupIPC(): void {
   ipcMain.handle('db:getCount', () => {
     const row = db.prepare('SELECT COUNT(*) as count FROM inventory').get() as { count: number }
     return row.count
+  })
+
+  // ─── Window title-bar overlay color ─────────────────────────────────────
+  // Lets the renderer recolor the native title bar so the overlay's
+  // min/maximize/close controls don't clash with whatever is on screen
+  // (e.g. the dark pack-opening overlay).
+  ipcMain.handle('window:setTitleBarOverlay', (event, opts: { color?: string; symbolColor?: string }) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || process.platform !== 'win32') return { success: false }
+    try {
+      win.setTitleBarOverlay({
+        color: opts.color ?? '#F3F4F6',
+        symbolColor: opts.symbolColor ?? '#111827',
+        height: 40
+      })
+      return { success: true }
+    } catch (err: any) {
+      console.error('[window:setTitleBarOverlay]', err?.message)
+      return { success: false }
+    }
   })
 
   // ─── JustTCG IPC ────────────────────────────────────────────────────────

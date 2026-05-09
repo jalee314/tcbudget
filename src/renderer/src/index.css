@@ -162,16 +162,55 @@ body {
 }
 
 /* ─── Status Badge Styles ─────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
 .badge-held {
   background: rgba(16, 185, 129, 0.1);
   color: #059669;
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.25);
 }
 
 .badge-sold {
   background: rgba(245, 158, 11, 0.1);
   color: #D97706;
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.badge-opened {
+  background: rgba(251, 191, 36, 0.12);
+  color: #B45309;
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.badge-keeping {
+  background: rgba(99, 102, 241, 0.1);
+  color: #4338CA;
+  border-color: rgba(99, 102, 241, 0.25);
+}
+
+.badge-gift {
+  background: rgba(236, 72, 153, 0.1);
+  color: #BE185D;
+  border-color: rgba(236, 72, 153, 0.25);
+}
+
+.badge-neutral {
+  background: rgba(148, 163, 184, 0.15);
+  color: #475569;
+  border-color: rgba(148, 163, 184, 0.3);
 }
 
 /* ─── Glow Effects ────────────────────────────────────────────────────── */
@@ -256,10 +295,12 @@ body {
 }
 
 /* ─── Pack Open Animation ─────────────────────────────────────────────── */
+/* Neutral dark gradient using the surface palette — matches the dark
+   inverse of the homepage's surface-50 base, no green tint. */
 .pack-open-bg {
   background:
-    radial-gradient(ellipse at center, rgba(34, 197, 94, 0.18) 0%, rgba(0, 0, 0, 0) 55%),
-    radial-gradient(ellipse at center, rgba(17, 24, 39, 0.92) 0%, rgba(0, 0, 0, 0.96) 100%);
+    radial-gradient(ellipse at center top, rgba(55, 65, 81, 0.55) 0%, rgba(0, 0, 0, 0) 60%),
+    linear-gradient(180deg, #0b1322 0%, #06090f 100%);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
@@ -283,7 +324,10 @@ body {
 }
 
 .pack-drop {
-  animation: packDrop 700ms cubic-bezier(0.55, 0, 0.55, 1) both;
+  /* Ease-in: starts slow, accelerates downward like gravity. The pack
+     reaches its peak speed near the end, so it appears to be "let go"
+     once the lid is off and falls away as the cards emerge upward. */
+  animation: packDrop 600ms cubic-bezier(0.45, 0, 0.85, 0.5) both;
 }
 
 .pack-glow {
@@ -581,6 +625,262 @@ body {
 .info-panel-reveal.is-visible > *:nth-child(6) { transition-delay: 300ms; }
 .info-panel-reveal.is-visible > *:nth-child(n+7) { transition-delay: 340ms; }
 
+/* ─── "Open all" button — homepage btn-primary, dark-bg adapted ──────── */
+.open-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: #22C55E;
+  color: #06250F;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 0 0 1px rgba(34, 197, 94, 0.5),
+    0 8px 24px rgba(34, 197, 94, 0.35);
+  transition: transform 160ms ease-out, background 160ms ease-out, box-shadow 160ms ease-out;
+  cursor: pointer;
+}
+.open-all-btn:hover {
+  background: #4ADE80;
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px rgba(34, 197, 94, 0.6),
+    0 12px 28px rgba(34, 197, 94, 0.45);
+}
+.open-all-btn:active { transform: translateY(0); }
+
+/* ─── Pull summary banner ───────────────────────────────────────────── */
+/* Styled like a homepage glass-card, but adapted for the dark backdrop. */
+.pull-summary-banner {
+  background: linear-gradient(180deg, rgba(31, 41, 55, 0.94) 0%, rgba(17, 24, 39, 0.94) 100%);
+  border: 1px solid rgba(229, 231, 235, 0.10);
+  border-radius: 16px;
+  padding: 16px 26px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 16px 40px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: pullSummaryIn 540ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.pull-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.pull-summary-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.pull-summary-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.pull-summary-value {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.pull-summary-arrow {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.3);
+  font-weight: 300;
+}
+
+.pull-summary-net {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 6px 14px;
+  border-radius: 10px;
+  margin-left: 8px;
+  position: relative;
+}
+
+.pull-summary-net.is-positive {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.25);
+}
+
+.pull-summary-net.is-negative {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.pull-summary-net-value {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 20px;
+  font-weight: 800;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.pull-summary-net.is-positive .pull-summary-net-value {
+  color: #6ee7b7;
+}
+
+.pull-summary-net.is-negative .pull-summary-net-value {
+  color: #fca5a5;
+}
+
+.pull-summary-pct {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+@keyframes pullSummaryIn {
+  0% { opacity: 0; transform: translateY(20px) scale(0.95); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── Card flip (face-down ↔ face-up for reveal-one mode) ───────────── */
+
+.pulled-card-flip {
+  perspective: 900px;
+  width: 100%;
+  height: 100%;
+}
+
+.pulled-card-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform: rotateY(180deg); /* face-down by default */
+}
+
+.pulled-card-flip.is-flipped .pulled-card-flip-inner {
+  transform: rotateY(0deg);
+}
+
+.pulled-card-flip-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pulled-card-flip-front {
+  /* Faces the viewer when rotateY = 0 */
+  transform: rotateY(0deg);
+}
+
+.pulled-card-flip-back {
+  /* Faces the viewer when rotateY = 180deg */
+  transform: rotateY(180deg);
+}
+
+/* ─── Card back design ─────────────────────────────────────────────── */
+/* Uses the real Pokémon card back image. The img fills the card frame
+   and we layer a subtle gold pulse glow on top of the wrapper to invite
+   the click while the card is face-down. */
+
+.card-back {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #04081f;
+}
+
+.card-back-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Slight overfill — the Bulbapedia scan has a faint scanner-bed
+     border at the rounded corners. Scaling up by ~5% crops those
+     corners cleanly without eating into the Pokémon wordmarks or
+     the centered pokeball. */
+  transform: scale(1.05);
+  transform-origin: center;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Procedural fallback (only used if the remote image fails to load) */
+.card-back-fallback {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 45%, #1e3a8a 0%, #0c1a4a 60%, #04081f 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.card-back-fallback::after {
+  content: 'POKÉMON';
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.25em;
+  color: #fbbf24;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+/* Subtle pulse on face-down cards to invite the click */
+.pulled-card-flip:not(.is-flipped) .card-back {
+  animation: cardBackPulse 2.6s ease-in-out infinite;
+}
+
+@keyframes cardBackPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+  50% { box-shadow: 0 0 28px 4px rgba(251, 191, 36, 0.30); }
+}
+
+/* ─── Best-pull highlight ─────────────────────────────────────────── */
+/* Elegant gold aura — no badge text. The card itself is the statement. */
+.pulled-card-best {
+  box-shadow:
+    0 0 0 1.5px rgba(252, 211, 77, 0.75),
+    0 0 28px rgba(252, 211, 77, 0.45),
+    0 0 80px rgba(252, 211, 77, 0.22),
+    0 18px 44px rgba(0, 0, 0, 0.6);
+}
+
+.pulled-card-best-glow {
+  position: absolute;
+  inset: -16px;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse at 50% 50%,
+      rgba(252, 211, 77, 0.35) 0%,
+      rgba(252, 211, 77, 0.12) 35%,
+      rgba(252, 211, 77, 0) 70%);
+  animation: bestPullGlow 3.6s ease-in-out infinite;
+  z-index: 1;
+  pointer-events: none;
+}
+
+@keyframes bestPullGlow {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
 .pack-top {
   top: 0;
   z-index: 2;
@@ -591,11 +891,32 @@ body {
     60% 13%, 54% 11%, 48% 14%, 42% 11%, 36% 13%, 30% 11%,
     24% 14%, 18% 11%, 12% 13%, 6% 11%, 0 13%
   );
+  /* Pivot at the bottom-left of the lid so a CCW rotation lifts the
+     RIGHT edge first — the foil is "torn" from right to left. */
+  transform-origin: 0% 13%;
 }
 
+/* Lid rip — the lid stays as one solid piece for the entire animation.
+   It hinges around the left edge so the right side lifts first, with
+   small wobbles during the tearing portion to simulate the perforation
+   giving way segment by segment. Once fully detached it floats up and
+   to the left, holding its shape until it leaves the screen. */
 .pack-top-rip {
-  transform: translate(-30%, -180%) rotate(-28deg);
-  opacity: 0;
+  animation: packTopRip 850ms cubic-bezier(0.5, 0, 0.55, 1) forwards;
+}
+
+@keyframes packTopRip {
+  0%   { transform: rotate(0deg) translate(0, 0); opacity: 1; }
+  6%   { transform: rotate(-3deg) translate(0, 0); }     /* initial tug — right side lifts */
+  10%  { transform: rotate(-2deg) translate(0, 0); }     /* tiny resist */
+  18%  { transform: rotate(-8deg) translate(0, 0); }     /* tear advances */
+  25%  { transform: rotate(-7deg) translate(0, 0); }     /* small jerk */
+  35%  { transform: rotate(-16deg) translate(0, 0); }
+  42%  { transform: rotate(-15deg) translate(0, 0); }    /* another resist */
+  52%  { transform: rotate(-26deg) translate(-2%, -4%); }/* tear nearly across */
+  65%  { transform: rotate(-38deg) translate(-10%, -35%); }/* hinge gives, lifts off */
+  78%  { transform: rotate(-52deg) translate(-22%, -100%); opacity: 1; }
+  100% { transform: rotate(-72deg) translate(-50%, -260%); opacity: 0; }
 }
 
 .pack-bottom {
@@ -667,11 +988,14 @@ body {
   will-change: transform, opacity;
 }
 
+/* Rare cards — subtle neutral lift (no yellow). The shine + holographic
+   sweep handles the "this is a hit" signal; the box-shadow just gives
+   the card a clean elevated edge. */
 .pulled-card-rare {
   box-shadow:
-    0 0 0 1px rgba(252, 211, 77, 0.5),
-    0 0 24px rgba(252, 211, 77, 0.35),
-    0 12px 32px rgba(0, 0, 0, 0.5);
+    0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 0 14px rgba(255, 255, 255, 0.08),
+    0 14px 32px rgba(0, 0, 0, 0.55);
 }
 
 .pulled-card-interactive {
@@ -732,13 +1056,15 @@ button:hover > .pulled-card-interactive.pulled-card-rare {
     transform: translateY(0) rotate(0deg);
     opacity: 1;
   }
-  20% {
-    transform: translateY(40px) rotate(-3deg);
+  15% {
+    /* Tiny pause — pack is "released" as the lid comes off. */
+    transform: translateY(8px) rotate(-1.5deg);
     opacity: 1;
   }
   100% {
-    transform: translateY(120vh) rotate(-12deg);
-    opacity: 0.85;
+    /* Falls clear of the screen with a slight tilt as it tumbles. */
+    transform: translateY(120vh) rotate(-10deg);
+    opacity: 0.9;
   }
 }
 

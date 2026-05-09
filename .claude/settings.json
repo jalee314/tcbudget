@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "C:\\Users\\jason\\tcbudget\\src\\renderer\\src\\assets"
+    ],
+    "allow": [
+      "Bash(npx electron-vite *)"
+    ]
+  }
+}

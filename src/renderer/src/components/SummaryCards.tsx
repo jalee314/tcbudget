@@ -5,6 +5,7 @@ interface SummaryCardsProps {
   summary: PortfolioSummary
   liquidationPct: number
   onLiquidationPctChange: (value: number) => void
+  includeHeldInPL: boolean
 }
 
 function LiquidationPctEditor({ value, onChange }: { value: number; onChange: (v: number) => void }) {
@@ -128,7 +129,12 @@ function StatCard({ label, value, subValue, icon, variant = 'default', headerExt
   )
 }
 
-export default function SummaryCards({ summary, liquidationPct, onLiquidationPctChange }: SummaryCardsProps) {
+export default function SummaryCards({
+  summary,
+  liquidationPct,
+  onLiquidationPctChange,
+  includeHeldInPL
+}: SummaryCardsProps) {
   const plVariant = summary.unrealizedPL >= 0 ? 'gain' : 'loss'
   const realizedVariant = summary.realizedGains >= 0 ? 'gain' : 'loss'
 
@@ -159,7 +165,13 @@ export default function SummaryCards({ summary, liquidationPct, onLiquidationPct
       <StatCard
         label="Unrealized P&L"
         value={formatCurrency(summary.unrealizedPL)}
-        subValue={`${formatPercent(summary.unrealizedPLPercent)}`}
+        subValue={
+          !includeHeldInPL
+            ? `${formatPercent(summary.unrealizedPLPercent)} · held value excluded`
+            : summary.keptCount > 0
+              ? `${formatPercent(summary.unrealizedPLPercent)} · ${summary.keptCount} kept excluded`
+              : formatPercent(summary.unrealizedPLPercent)
+        }
         variant={plVariant}
         headerExtra={<LiquidationPctEditor value={liquidationPct} onChange={onLiquidationPctChange} />}
         icon={

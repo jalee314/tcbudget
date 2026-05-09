@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid'
 const LIQUIDATION_PCT_KEY = 'liquidation_pct_v1'
 const LAST_AUTO_REFRESH_KEY = 'last_auto_refresh_at'
 const ROW_ORDER_KEY = 'inventory_row_order_v1'
+const INCLUDE_HELD_IN_PL_KEY = 'include_held_in_pl_v1'
 const AUTO_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000 // 12 hours
 
 function applySavedOrder(rows: InventoryCard[]): InventoryCard[] {
@@ -49,11 +50,37 @@ export default function App() {
   const [editingPulledFromFor, setEditingPulledFromFor] = useState<InventoryCard | null>(null)
   const [ripAnimationParent, setRipAnimationParent] = useState<InventoryCard | null>(null)
   const [liquidationPct, setLiquidationPct] = useState<number>(() => loadLiquidationPct())
+  const [includeHeldInPL, setIncludeHeldInPL] = useState<boolean>(() => {
+    const raw = localStorage.getItem(INCLUDE_HELD_IN_PL_KEY)
+    return raw == null ? true : raw === '1'
+  })
 
   const updateLiquidationPct = useCallback((value: number) => {
     const clamped = Math.max(1, Math.min(100, Math.round(value)))
     setLiquidationPct(clamped)
     localStorage.setItem(LIQUIDATION_PCT_KEY, String(clamped))
+  }, [])
+
+  const toggleIncludeHeldInPL = useCallback(() => {
+    setIncludeHeldInPL(v => {
+      const next = !v
+      localStorage.setItem(INCLUDE_HELD_IN_PL_KEY, next ? '1' : '0')
+      return next
+    })
+  }, [])
+
+  const handleToggleKeep = useCallback(async (card: InventoryCard) => {
+    const next = card.is_kept === 1 ? 0 : 1
+    try {
+      if (window.electronAPI) {
+        await window.electronAPI.db.update(card.id, 'is_kept', next)
+      }
+      setInventory(prev => prev.map(c =>
+        c.id === card.id ? { ...c, is_kept: next } : c
+      ))
+    } catch (err) {
+      console.error('Failed to toggle keep:', err)
+    }
   }, [])
 
   // ─── Load data on mount ────────────────────────────────────────────
@@ -105,10 +132,21 @@ export default function App() {
       sold.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
     // Opened sealed items have no resale value as sealed product — treated as $0 market value
     const totalMarketValue = held.reduce((sum, c) => sum + c.market_price * c.quantity, 0)
-    const heldCostBasis = held.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
+    // P&L excludes per-item "keeping" flags from both sides. When the global toggle is
+    // OFF, Card-type held items are also excluded (treated as if all kept) — sealed
+    // products still contribute. Already-kept items aren't double-excluded.
+    const plHeld = held.filter(c => {
+      if (c.is_kept === 1) return false
+      if (!includeHeldInPL && c.item_type === 'Card') return false
+      return true
+    })
+    const heldMarketValue = plHeld.reduce((sum, c) => sum + c.market_price * c.quantity, 0)
+    const heldCostBasis = plHeld.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
     const liquidationFactor = liquidationPct / 100
-    const unrealizedPL = totalMarketValue * liquidationFactor - heldCostBasis
+    const unrealizedPL = heldMarketValue * liquidationFactor - heldCostBasis
     const unrealizedPLPercent = heldCostBasis > 0 ? (unrealizedPL / heldCostBasis) * 100 : 0
+    const kept = held.filter(c => c.is_kept === 1)
+    const keptValue = kept.reduce((sum, c) => sum + c.market_price * c.quantity, 0)
     const realizedGains =
       sold.reduce((sum, c) => sum + c.sale_price - (c.purchase_price * c.quantity), 0) -
       opened.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
@@ -130,9 +168,11 @@ export default function App() {
       heldCount: held.length,
       soldCount: sold.length,
       openedCount: opened.length,
-      openedCost
+      openedCost,
+      keptCount: kept.length,
+      keptValue
     }
-  }, [inventory, liquidationPct])
+  }, [inventory, liquidationPct, includeHeldInPL])
 
   // ─── Row reorder ──────────────────────────────────────────────────
   const handleReorder = useCallback((orderedIds: string[]) => {
@@ -435,6 +475,37 @@ export default function App() {
     }
   }, [])
 
+  // ─── Export / Import DB ───────────────────────────────────────────
+  // The DB file is the canonical sync unit between devices: copy it via
+  // USB/AirDrop/LAN to share state without a cloud backend.
+  const handleExportDb = useCallback(async () => {
+    try {
+      if (!window.electronAPI) return
+      const result = await window.electronAPI.db.exportDb()
+      if (!result.success && result.message && result.message !== 'Cancelled') {
+        alert(`Export failed: ${result.message}`)
+      }
+    } catch (err) {
+      console.error('Failed to export database:', err)
+    }
+  }, [])
+
+  const handleImportDb = useCallback(async () => {
+    try {
+      if (!window.electronAPI) return
+      const result = await window.electronAPI.db.importDb()
+      if (result.success) {
+        // The DB has been swapped underneath us — re-pull everything.
+        const rows = await window.electronAPI.db.getAll()
+        setInventory(rows as unknown as InventoryCard[])
+      } else if (result.message && result.message !== 'Cancelled') {
+        alert(`Import failed: ${result.message}`)
+      }
+    } catch (err) {
+      console.error('Failed to import database:', err)
+    }
+  }, [])
+
   // ─── Keyboard shortcuts ───────────────────────────────────────────
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -487,12 +558,15 @@ export default function App() {
         onAddCard={() => setIsSearchOpen(true)}
         onRefreshPrices={handleRefreshPrices}
         onExportCsv={handleExportCsv}
+        onExportDb={handleExportDb}
+        onImportDb={handleImportDb}
         isRefreshing={isRefreshing}
       />
       <SummaryCards
         summary={summary}
         liquidationPct={liquidationPct}
         onLiquidationPctChange={updateLiquidationPct}
+        includeHeldInPL={includeHeldInPL}
       />
       {activeParentFilter && (
         <div className="mx-6 mt-4 flex items-center justify-between animate-fade-in">
@@ -514,6 +588,9 @@ export default function App() {
           onDeleteRow={handleDeleteRow}
           onToggleSold={handleToggleSold}
           onToggleOpened={handleToggleOpened}
+          onToggleKeep={handleToggleKeep}
+          includeHeldInPL={includeHeldInPL}
+          onToggleIncludeHeldInPL={toggleIncludeHeldInPL}
           onViewContents={(id) => {
             const parent = inventory.find(c => c.id === id)
             if (parent) setRipAnimationParent(parent)

@@ -22,6 +22,7 @@ export interface InventoryCard {
   is_opened?: number
   variant_id?: string | null
   price_change_baseline?: number | null
+  is_kept?: number
 }
 
 export interface SearchCardVariant {
@@ -70,4 +71,6 @@ export interface PortfolioSummary {
   soldCount: number
   openedCount: number
   openedCost: number
+  keptCount: number
+  keptValue: number
 }

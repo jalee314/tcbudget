@@ -9,6 +9,7 @@ import {
   RowDragEndEvent
 } from 'ag-grid-community'
 import { InventoryCard } from '../types'
+import { CardImage } from '../utils/cardImage'
 
 const CARD_CONDITIONS = ['Raw', 'Raw NM', 'Raw LP', 'Raw MP', 'Raw HP', 'PSA 10', 'PSA 9', 'PSA 8', 'PSA 7', 'CGC 10', 'CGC 9.5', 'CGC 9', 'BGS 10', 'BGS 9.5', 'BGS 9']
 const SEALED_CONDITIONS = ['Sealed', 'Opened']
@@ -23,7 +24,7 @@ const TOGGLEABLE_COLUMNS: { colId: string; label: string }[] = [
   { colId: 'cost_basis', label: 'Cost Basis' },
   { colId: 'total_gl', label: 'Total G/L' },
   { colId: 'status', label: 'Status' },
-  { colId: 'sale_price', label: 'Sale' },
+  { colId: 'sale_price', label: 'Sale Price' },
   { colId: 'purchase_date', label: 'Date' },
   { colId: 'notes', label: 'Notes' }
 ]
@@ -46,6 +47,9 @@ interface DataGridProps {
   onDeleteRow: (id: string) => void
   onToggleSold: (card: InventoryCard) => void
   onToggleOpened: (card: InventoryCard) => void
+  onToggleKeep: (card: InventoryCard) => void
+  includeHeldInPL: boolean
+  onToggleIncludeHeldInPL: () => void
   onViewContents?: (id: string) => void
   onEditPulledFrom?: (card: InventoryCard) => void
   onReorder?: (orderedIds: string[]) => void
@@ -77,11 +81,15 @@ function CardNameRenderer(props: ICellRendererParams<GridRow> & { onToggleGroup?
         >
           <polyline points="9 18 15 12 9 6" />
         </svg>
-        {data.image_url && (
-          <div className="w-8 h-11 rounded overflow-hidden flex-shrink-0">
-            <img src={data.image_url} alt={data.name} className="w-full h-full object-contain" loading="lazy" />
-          </div>
-        )}
+        <div className="w-8 h-11 rounded overflow-hidden flex-shrink-0 bg-surface-100">
+          <CardImage
+            src={data.image_url}
+            setId={data.set_id}
+            name={data.name}
+            alt={data.name}
+            className="w-full h-full object-contain"
+          />
+        </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-surface-900 truncate flex items-center gap-2">
             {data.name}
@@ -97,19 +105,15 @@ function CardNameRenderer(props: ICellRendererParams<GridRow> & { onToggleGroup?
 
   return (
     <div className={`flex items-center gap-3 overflow-hidden w-full ${data.__inGroup ? 'pl-6' : ''}`}>
-      {data.image_url && (
-        <div className="w-8 h-11 rounded overflow-hidden flex-shrink-0">
-          <img
-            src={data.image_url}
-            alt={data.name}
-            className="w-full h-full object-contain"
-            loading="lazy"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none'
-            }}
-          />
-        </div>
-      )}
+      <div className="w-8 h-11 rounded overflow-hidden flex-shrink-0 bg-surface-100">
+        <CardImage
+          src={data.image_url}
+          setId={data.set_id}
+          name={data.name}
+          alt={data.name}
+          className="w-full h-full object-contain"
+        />
+      </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-surface-900 truncate">
           {data.__inGroup ? <span className="text-surface-500 text-xs">Lot · </span> : null}
@@ -156,6 +160,20 @@ function PurchasePriceRenderer(props: ICellRendererParams<GridRow>) {
   const data = props.data
   if (!data) return null
   const isGroup = !!data.__isGroup
+  if (data.purchase_price === 0 && !isGroup) {
+    return (
+      <span className="badge badge-gift" title="Gifted — no purchase cost">
+        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 12 20 22 4 22 4 12"/>
+          <rect x="2" y="7" width="20" height="5"/>
+          <line x1="12" y1="22" x2="12" y2="7"/>
+          <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+          <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+        </svg>
+        Gift
+      </span>
+    )
+  }
   return (
     <span className={`text-sm font-mono ${isGroup ? 'text-surface-500 italic' : 'text-surface-700'}`}>
       {formatCurrency(data.purchase_price)}
@@ -167,6 +185,9 @@ function CostBasisRenderer(props: ICellRendererParams<GridRow>) {
   const data = props.data
   if (!data) return null
   const isGroup = !!data.__isGroup
+  if (data.purchase_price === 0 && !isGroup) {
+    return <span className="text-surface-400" title="Gifted (no cost)">—</span>
+  }
   return (
     <span className={`text-sm font-mono ${isGroup ? 'text-surface-500 italic' : 'text-surface-700'}`}>
       {formatCurrency(data.purchase_price * data.quantity)}
@@ -203,7 +224,7 @@ function makeTotalGLRenderer(getMode: () => DisplayMode) {
   return function TotalGLRenderer(props: ICellRendererParams<GridRow>) {
     const data = props.data
     if (!data) return null
-    if (data.is_opened === 1 && !data.is_sold) {
+    if (data.is_sold || (data.is_opened === 1 && !data.is_sold)) {
       return <span className="text-surface-300">—</span>
     }
     const gl = (data.market_price - data.purchase_price) * data.quantity
@@ -238,56 +259,53 @@ function ToggleHeader(props: IHeaderParams & { mode: DisplayMode; onToggle: () =
   )
 }
 
-function SaleRenderer(props: ICellRendererParams<GridRow>) {
-  const data = props.data
-  if (!data || data.__isGroup || !data.is_sold || data.sale_price === 0) {
-    return <span className="text-surface-400">—</span>
+function makeSaleRenderer(getMode: () => DisplayMode) {
+  return function SaleRenderer(props: ICellRendererParams<GridRow>) {
+    const data = props.data
+    if (!data || data.__isGroup || !data.is_sold || data.sale_price === 0) {
+      return <span className="text-surface-400">—</span>
+    }
+    const total = data.sale_price
+    const cost = data.purchase_price * data.quantity
+    const gl = total - cost
+    const isPositive = gl >= 0
+    const pct = cost > 0 ? (gl / cost) * 100 : null
+    const mode = getMode()
+    const glClass = gl === 0 ? 'text-surface-500' : isPositive ? 'text-gain' : 'text-loss'
+    const glText = mode === '$'
+      ? `${isPositive && gl !== 0 ? '+' : ''}${formatCurrency(gl)}`
+      : pct == null ? '—' : `${isPositive && pct !== 0 ? '+' : ''}${pct.toFixed(1)}%`
+
+    return (
+      <div className="flex items-baseline gap-1.5 font-mono">
+        <span className="text-surface-900 font-medium text-sm">{formatCurrency(total)}</span>
+        <span className={`text-xs ${glClass}`}>({glText})</span>
+      </div>
+    )
   }
-  const total = data.sale_price
-  const unit = data.quantity > 0 ? total / data.quantity : 0
-  const pctOfMarket = data.market_price > 0 ? (unit / data.market_price) * 100 : null
-  const pctClass = pctOfMarket == null
-    ? ''
-    : pctOfMarket >= 80 ? 'text-gain' : 'text-loss'
-
-  const parts: string[] = []
-  if (data.quantity > 1) parts.push(formatCurrency(unit))
-  if (pctOfMarket != null) parts.push(`${pctOfMarket.toFixed(0)}%`)
-
-  return (
-    <div className="flex items-baseline gap-1.5 font-mono">
-      <span className="text-surface-900 font-medium text-sm">{formatCurrency(total)}</span>
-      {parts.length > 0 && (
-        <span className={`text-xs ${pctClass || 'text-surface-400'}`}>
-          ({parts.join(' · ')})
-        </span>
-      )}
-    </div>
-  )
 }
 
 function StatusRenderer(props: ICellRendererParams<GridRow>) {
   const data = props.data
   if (!data) return null
   if (data.__isGroup) {
-    return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider bg-surface-100 text-surface-500">Lots</span>
+    return <span className="badge badge-neutral">Lots</span>
   }
   const isSold = !!data.is_sold
   const isOpened = data.is_opened === 1 && !isSold
+  const isKept = data.is_kept === 1 && !isSold && !isOpened
 
-  if (isSold) {
-    return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider badge-sold">Sold</span>
-  }
-  if (isOpened) {
-    return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider bg-amber-100 text-amber-700">Opened</span>
-  }
-  return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider badge-held">Held</span>
+  if (isSold) return <span className="badge badge-sold">Sold</span>
+  if (isOpened) return <span className="badge badge-opened">Opened</span>
+  if (isKept) return <span className="badge badge-keeping">Keeping</span>
+  return <span className="badge badge-held">Held</span>
 }
 
 function ActionsRenderer(props: ICellRendererParams<GridRow> & {
   onDelete: (id: string) => void
   onToggleSold: (card: InventoryCard) => void
   onToggleOpened: (card: InventoryCard) => void
+  onToggleKeep: (card: InventoryCard) => void
   onViewContents?: (id: string) => void
   onEditPulledFrom?: (card: InventoryCard) => void
 }) {
@@ -298,9 +316,23 @@ function ActionsRenderer(props: ICellRendererParams<GridRow> & {
   const isSealed = data.item_type === 'Sealed'
   const isOpened = data.is_opened === 1
   const isCard = data.item_type === 'Card'
+  const isHeld = !isSold && !isOpened
+  const isKept = data.is_kept === 1
 
   return (
     <div className="flex items-center gap-1">
+      {/* Keep toggle — only meaningful for held items (not sold, not opened) */}
+      {isHeld && (
+        <button
+          onClick={() => props.onToggleKeep(data)}
+          className={`p-1.5 rounded-md transition-all ${isKept ? 'text-indigo-600 hover:bg-indigo-50' : 'text-surface-500 hover:text-indigo-600 hover:bg-indigo-50'}`}
+          title={isKept ? 'Including in P&L' : 'Exclude from P&L (mark as keeping)'}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill={isKept ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+          </svg>
+        </button>
+      )}
       {/* Pulled-from edit — cards only */}
       {isCard && props.onEditPulledFrom && (
         <button
@@ -388,7 +420,7 @@ function formatCurrency(val: number): string {
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
-export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onToggleSold, onToggleOpened, onViewContents, onEditPulledFrom, onReorder }: DataGridProps) {
+export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onToggleSold, onToggleOpened, onToggleKeep, includeHeldInPL, onToggleIncludeHeldInPL, onViewContents, onEditPulledFrom, onReorder }: DataGridProps) {
   const gridRef = useRef<AgGridReact>(null)
   const gridWrapperRef = useRef<HTMLDivElement>(null)
   const [filterText, setFilterText] = useState('')
@@ -399,6 +431,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
   const columnMenuRef = useRef<HTMLDivElement>(null)
   const [priceChangeMode, setPriceChangeMode] = useState<DisplayMode>('$')
   const [totalGLMode, setTotalGLMode] = useState<DisplayMode>('$')
+  const [salePriceMode, setSalePriceMode] = useState<DisplayMode>('$')
 
   const toggleColumn = useCallback((colId: string) => {
     setHiddenColumns(prev => {
@@ -431,6 +464,9 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
   useEffect(() => {
     gridRef.current?.api?.refreshCells({ columns: ['total_gl'], force: true })
   }, [totalGLMode])
+  useEffect(() => {
+    gridRef.current?.api?.refreshCells({ columns: ['sale_price'], force: true })
+  }, [salePriceMode])
 
   // Click on grid wrapper background → clear cell focus
   useEffect(() => {
@@ -559,6 +595,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
 
   const priceChangeRenderer = useMemo(() => makePriceChangeRenderer(() => priceChangeMode), [priceChangeMode])
   const totalGLRenderer = useMemo(() => makeTotalGLRenderer(() => totalGLMode), [totalGLMode])
+  const saleRenderer = useMemo(() => makeSaleRenderer(() => salePriceMode), [salePriceMode])
 
   const columnDefs = useMemo<ColDef<GridRow>[]>(() => [
     {
@@ -711,19 +748,26 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
         if (!d || d.__isGroup) return ''
         if (d.is_sold) return 'Sold'
         if (d.is_opened) return 'Opened'
+        if (d.is_kept === 1) return 'Keeping'
         return 'Held'
       }
     },
     {
-      headerName: 'Sale',
+      headerName: 'SALE PRICE',
       colId: 'sale_price',
       field: 'sale_price',
-      width: 160,
-      minWidth: 130,
+      width: 170,
+      minWidth: 140,
       hide: hiddenColumns.has('sale_price'),
       editable: (params) => params.data?.is_sold === 1,
       cellDataType: 'number',
-      cellRenderer: SaleRenderer,
+      cellRenderer: saleRenderer,
+      headerComponent: ToggleHeader,
+      headerComponentParams: {
+        mode: salePriceMode,
+        onToggle: () => setSalePriceMode(m => m === '$' ? '%' : '$'),
+        label: 'SALE PRICE'
+      },
       tooltipValueGetter: (params) => {
         const d = params.data
         if (!d || !d.is_sold) return ''
@@ -755,14 +799,15 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
     {
       headerName: '',
       colId: 'actions',
-      valueGetter: (params) => params.data ? `${params.data.is_sold}|${params.data.is_opened}|${params.data.parent_id ?? ''}` : '',
-      width: 140,
-      minWidth: 140,
+      valueGetter: (params) => params.data ? `${params.data.is_sold}|${params.data.is_opened}|${params.data.is_kept ?? 0}|${params.data.parent_id ?? ''}` : '',
+      width: 170,
+      minWidth: 170,
       cellRenderer: ActionsRenderer,
       cellRendererParams: {
         onDelete: onDeleteRow,
         onToggleSold: onToggleSold,
         onToggleOpened: onToggleOpened,
+        onToggleKeep: onToggleKeep,
         onViewContents: onViewContents,
         onEditPulledFrom: onEditPulledFrom
       },
@@ -770,7 +815,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       sortable: false,
       filter: false
     }
-  ], [onDeleteRow, onToggleSold, onToggleOpened, onViewContents, onEditPulledFrom, toggleGroup, hiddenColumns, priceChangeRenderer, totalGLRenderer, priceChangeMode, totalGLMode])
+  ], [onDeleteRow, onToggleSold, onToggleOpened, onToggleKeep, onViewContents, onEditPulledFrom, toggleGroup, hiddenColumns, priceChangeRenderer, totalGLRenderer, saleRenderer, priceChangeMode, totalGLMode, salePriceMode])
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,
@@ -848,7 +893,24 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
           {filteredByType.length} {filteredByType.length === 1 ? 'item' : 'items'}
         </span>
 
-        <div className="relative ml-auto" ref={columnMenuRef}>
+        <button
+          onClick={onToggleIncludeHeldInPL}
+          className="ml-auto flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-surface-700 border border-surface-200 rounded-lg bg-surface-50 hover:bg-white transition-colors"
+          title={includeHeldInPL ? 'Held cards count toward P&L. Click to exclude.' : 'Held cards excluded from P&L. Click to include.'}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="5" y="3" width="14" height="18" rx="2"/>
+            <path d="M9 8h6"/>
+            <path d="M9 12h6"/>
+            <path d="M9 16h4"/>
+          </svg>
+          Held in P&L
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${includeHeldInPL ? 'bg-accent/15 text-accent-dark' : 'bg-surface-200 text-surface-600'}`}>
+            {includeHeldInPL ? 'ON' : 'OFF'}
+          </span>
+        </button>
+
+        <div className="relative" ref={columnMenuRef}>
           <button
             onClick={() => setShowColumnMenu(v => !v)}
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-surface-700 border border-surface-200 rounded-lg bg-surface-50 hover:bg-white transition-colors"

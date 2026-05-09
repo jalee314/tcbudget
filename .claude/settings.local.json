@@ -8,7 +8,10 @@
       "Bash(xargs grep -l \"justtcg\\\\|searchSealed\")",
       "Bash(awk 'NR<833 || NR>1009' src/renderer/src/components/PackOpenAnimation.tsx)",
       "Bash(mv tmp.tsx src/renderer/src/components/PackOpenAnimation.tsx)",
-      "Bash(awk 'NR<592 || NR>869' src/renderer/src/components/PackOpenAnimation.tsx)"
+      "Bash(awk 'NR<592 || NR>869' src/renderer/src/components/PackOpenAnimation.tsx)",
+      "PowerShell(Add-Type -AssemblyName System.Drawing; $img = [System.Drawing.Image]::FromFile\\(\\(Resolve-Path 'pokemon_card_back.png'\\)\\); \"$\\($img.Width\\) x $\\($img.Height\\) px, $\\(\\(Get-Item pokemon_card_back.png\\).Length\\) bytes\"; $img.Dispose\\(\\))",
+      "WebSearch",
+      "WebFetch(domain:bulbapedia.bulbagarden.net)"
     ]
   }
 }

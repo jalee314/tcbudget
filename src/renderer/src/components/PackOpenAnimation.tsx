@@ -1,5 +1,21 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { InventoryCard } from '../types'
+import { loadMutePref, saveMutePref, playPackTear, playCardFlip, playRareDing, playBestPullChime, playRevealAll } from '../utils/packSounds'
+import pokemonCardBackUrl from '../assets/pokemon_card_back.jpg'
+
+const REVEAL_MODE_KEY = 'pack_open_reveal_mode_v1'
+type RevealMode = 'all' | 'one'
+function loadRevealMode(): RevealMode {
+  try {
+    // Default to "one at a time" — that's the more engaging flow.
+    return localStorage.getItem(REVEAL_MODE_KEY) === 'all' ? 'all' : 'one'
+  } catch {
+    return 'one'
+  }
+}
+function saveRevealMode(mode: RevealMode): void {
+  try { localStorage.setItem(REVEAL_MODE_KEY, mode) } catch { /* ignore */ }
+}
 
 interface Props {
   parentItem: InventoryCard
@@ -18,9 +34,12 @@ type Phase = 'enter' | 'rip' | 'extract' | 'spread' | 'settled'
 
 const PHASE_TIMINGS: Record<Exclude<Phase, 'enter'>, number> = {
   rip: 400,
-  extract: 850,
-  spread: 1350,
-  settled: 2200
+  // Lid finishes its 850ms tear at ~1250ms; give it a small breathing
+  // room then drop the pack body away so the cards appear to be drawn
+  // out of the now-empty pack.
+  extract: 1300,
+  spread: 1700,
+  settled: 2500
 }
 
 // Stable hash so each card's shine is consistent across renders but
@@ -170,6 +189,46 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
   const setKey = parentItem.set_id || parentItem.set_name || parentItem.name
   const [phase, setPhase] = useState<Phase>('enter')
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+  const [muted, setMuted] = useState<boolean>(() => loadMutePref())
+  const toggleMute = useCallback(() => {
+    setMuted(m => {
+      const next = !m
+      saveMutePref(next)
+      return next
+    })
+  }, [])
+  const [revealMode, setRevealMode] = useState<RevealMode>(() => loadRevealMode())
+  const toggleRevealMode = useCallback(() => {
+    setRevealMode(m => {
+      const next = m === 'one' ? 'all' : 'one'
+      saveRevealMode(next)
+      return next
+    })
+  }, [])
+  // In reveal-one mode, tracks which cards have been flipped face-up.
+  // (In reveal-all mode this set is ignored — every card is treated as flipped.)
+  const [flippedCardIds, setFlippedCardIds] = useState<Set<string>>(new Set())
+
+  // ─── Pull summary stats (cost, pull value, net) ──────────────────────────
+  const pullSummary = useMemo(() => {
+    const pullValue = cards.reduce((s, c) => s + c.market_price * c.quantity, 0)
+    const cost = parentItem.purchase_price * parentItem.quantity
+    const net = pullValue - cost
+    const pct = cost > 0 ? (net / cost) * 100 : null
+    return { cost, pullValue, net, pct, packs: parentItem.quantity }
+  }, [cards, parentItem.purchase_price, parentItem.quantity])
+
+  // ─── Best pull — the single most valuable card in the pull ──────────────
+  const bestPullId = useMemo(() => {
+    if (cards.length === 0) return null
+    let best = cards[0]
+    for (const c of cards) {
+      if (c.market_price > best.market_price) best = c
+    }
+    // Only celebrate "best pull" if there's a meaningful winner — multiple
+    // cards tied at the same low value shouldn't get a glow.
+    return best.market_price > 0 ? best.id : null
+  }, [cards])
   // Direction of the most recent navigation — drives the slide animation
   // on the hero card / detail panel when cycling via arrow keys.
   const [navDirection, setNavDirection] = useState<'left' | 'right' | null>(null)
@@ -226,6 +285,27 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
     return () => clearTimeout(t)
   }, [imageLookupDone])
 
+  // Recolor the native window title bar so the min/maximize/close buttons
+  // sit on a dark background that matches the pack overlay. Restored to
+  // the app's default light scheme on unmount.
+  // NOTE: requires an Electron restart for the preload IPC to register
+  // the first time — hot reload only updates the renderer.
+  useEffect(() => {
+    const api = (window as any).electronAPI
+    if (!api?.window?.setTitleBarOverlay) {
+      console.warn('[PackOpenAnimation] electronAPI.window.setTitleBarOverlay not available — restart the Electron dev process so the new preload script loads.')
+      return
+    }
+    api.window
+      .setTitleBarOverlay({ color: '#0b1322', symbolColor: '#E5E7EB' })
+      .catch((err: unknown) => console.warn('[PackOpenAnimation] failed to recolor title bar:', err))
+    return () => {
+      api.window
+        .setTitleBarOverlay({ color: '#F3F4F6', symbolColor: '#111827' })
+        .catch(() => { /* ignore on unmount */ })
+    }
+  }, [])
+
   // Start the rip sequence ONLY once we know whether we have an image
   // (lookup finished — either we have the real image, or we're falling
   // back to the procedural pack). Nothing renders before this.
@@ -241,6 +321,30 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
     ]
     return () => timers.forEach(clearTimeout)
   }, [animationStarted])
+
+  // ─── Sound effects ────────────────────────────────────────────────────
+  // Each phase transition fires its corresponding SFX. Refs guard against
+  // re-firing if the effect re-runs from unrelated state changes.
+  const tearedRef = useRef(false)
+  const dealtRef = useRef(false)
+  const dingedRef = useRef(false)
+  useEffect(() => {
+    if (phase === 'rip' && !tearedRef.current) {
+      tearedRef.current = true
+      playPackTear(muted)
+    }
+    if (phase === 'spread' && !dealtRef.current && revealMode === 'all') {
+      // Reveal-all: one consolidated whoosh+chime instead of stacking
+      // per-card flips, rare ding, and best-pull chime.
+      dealtRef.current = true
+      playRevealAll(muted)
+    }
+    if (phase === 'settled' && !dingedRef.current) {
+      // No-op marker — kept so we don't fire reveal sounds twice if the
+      // effect re-runs.
+      dingedRef.current = true
+    }
+  }, [phase, muted, cards, revealMode, bestPullId])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -379,22 +483,48 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
     }
   }, [cards.length, layoutMode, selectedIndex, useFan, fanLayout, gridCols])
 
+  // In reveal-one mode the first click flips the card; subsequent clicks
+  // (once it's face-up) open the focused view. In reveal-all mode every
+  // click goes straight to focus.
   const handleCardClick = (index: number, e: React.MouseEvent) => {
     e.stopPropagation()
     if (!cardsClickable) return
-    // No rect needed — the unified card layout handles the physical
-    // movement via CSS transforms automatically.
+    const card = cards[index]
+    if (revealMode === 'one' && !flippedCardIds.has(card.id)) {
+      setFlippedCardIds(prev => {
+        const next = new Set(prev)
+        next.add(card.id)
+        return next
+      })
+      playCardFlip(muted)
+      // Best pull gets its own bell — feels earned. Other cards stay
+      // quiet apart from the flip whoosh.
+      if (card.id === bestPullId) playBestPullChime(muted, 0.15)
+      return
+    }
     navigateTo(index)
   }
 
+  const allFlipped = revealMode === 'all' || cards.every(c => flippedCardIds.has(c.id))
+  const showSummary =
+    phase === 'settled' && selectedIndex === null && cards.length > 0 && allFlipped
+
+  // "Open All" — flip every remaining face-down card at once with the
+  // consolidated reveal whoosh.
+  const handleOpenAll = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (revealMode !== 'one') return
+    if (allFlipped) return
+    setFlippedCardIds(new Set(cards.map(c => c.id)))
+    playRevealAll(muted)
+  }
+
   // Backdrop click: if a card is focused, just clear the selection (back to
-  // the fan / grid). Otherwise close the whole pack overlay.
+  // the fan / grid). Otherwise do nothing — closing requires the X button.
   const handleBackdropClick = () => {
     if (selectedIndex !== null) {
       setSelectedIndex(null)
       setNavDirection(null)
-    } else {
-      onClose()
     }
   }
 
@@ -403,11 +533,54 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
       className="fixed inset-0 z-[60] flex items-center justify-center pack-open-bg animate-fade-in"
       onClick={handleBackdropClick}
     >
-      {/* Top-right close + actions */}
+      {/* Top-right close + actions. Pushed below the 40px Electron title-bar
+          overlay so they don't sit under the native min/maximize/close
+          window controls on Windows. */}
       <div
-        className="absolute top-4 right-4 flex items-center gap-2 z-30"
+        className="absolute right-4 flex items-center gap-2 z-30"
+        style={{ top: 52 }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Reveal mode toggle */}
+        <button
+          onClick={toggleRevealMode}
+          className="w-9 h-9 flex items-center justify-center rounded-full text-white/80 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm"
+          title={revealMode === 'one' ? 'Reveal: one at a time (click to switch to all-at-once)' : 'Reveal: all at once (click to switch to one-by-one)'}
+        >
+          {revealMode === 'one' ? (
+            // Eye icon
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          ) : (
+            // Stack-of-cards icon
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="14" height="18" rx="2"/>
+              <path d="M7 7h14v14"/>
+            </svg>
+          )}
+        </button>
+        {/* Mute toggle */}
+        <button
+          onClick={toggleMute}
+          className="w-9 h-9 flex items-center justify-center rounded-full text-white/80 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm"
+          title={muted ? 'Sound off (click to unmute)' : 'Sound on (click to mute)'}
+        >
+          {muted ? (
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <line x1="22" y1="9" x2="16" y2="15"/>
+              <line x1="16" y1="9" x2="22" y2="15"/>
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            </svg>
+          )}
+        </button>
         {phase !== 'settled' && (
           <button
             onClick={skipToEnd}
@@ -435,10 +608,11 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
         </button>
       </div>
 
-      {/* Header label */}
+      {/* Header label — also offset below the title bar overlay. */}
       <div
-        className="absolute top-6 left-1/2 -translate-x-1/2 text-center pointer-events-none z-20"
+        className="absolute left-1/2 -translate-x-1/2 text-center pointer-events-none z-20"
         style={{
+          top: 56,
           opacity: phase === 'settled' ? 1 : 0,
           transform: `translateX(-50%) translateY(${phase === 'settled' ? '0' : '-8px'})`,
           transition: 'opacity 400ms ease-out, transform 400ms ease-out'
@@ -447,7 +621,11 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
         <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">Pulled from</p>
         <p className="text-base font-semibold text-white/90 mt-0.5">{parentItem.name}</p>
         {phase === 'settled' && cards.length > 0 && (
-          <p className="text-[11px] text-white/40 mt-1">Click a card to inspect</p>
+          <p className="text-[11px] text-white/40 mt-1">
+            {revealMode === 'one' && !allFlipped
+              ? `Click a card to reveal · ${flippedCardIds.size}/${cards.length} flipped`
+              : 'Click a card to inspect'}
+          </p>
         )}
       </div>
 
@@ -466,7 +644,7 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
         {animationStarted && (
           <>
             <div
-              className={`pack-wrap ${phase === 'enter' ? 'pack-enter' : ''} ${phase === 'rip' ? 'pack-shake' : ''} ${isSpreadOrLater ? 'pack-drop' : ''}`}
+              className={`pack-wrap ${phase === 'enter' ? 'pack-enter' : ''} ${phase === 'rip' ? 'pack-shake' : ''} ${isExtractedOrLater ? 'pack-drop' : ''}`}
               style={{
                 ['--pack-hue' as string]: `${accent.hue}deg`
               } as React.CSSProperties}
@@ -492,7 +670,10 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
                     }}
                   />
                 </div>
-                {/* Lid — small top sliver that tears off */}
+                {/* Lid — top sliver that rips off as one solid piece.
+                    The wobbled rotation around the left hinge gives it a
+                    real "perforation tearing" feel without the lid
+                    visually disappearing during the motion. */}
                 <div className={`pack-half pack-top ${phase === 'rip' || isExtractedOrLater ? 'pack-top-rip' : ''}`}>
                   {packImage ? (
                     <img src={packImage} alt="" className="pack-art-image" draggable={false} />
@@ -532,6 +713,8 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
               const t = getCardTransform(i)
               const isHero = layoutMode === 'focused' && i === selectedIndex
               const enterDelay = layoutMode === 'extracted' ? 60 + i * 55 : 0
+              const isFlipped = revealMode === 'all' || flippedCardIds.has(card.id)
+              const isBestPull = card.id === bestPullId && isFlipped
               return (
                 <button
                   key={card.id}
@@ -555,25 +738,79 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
                     padding: 0,
                     borderRadius: 12
                   }}
-                  title={card.name}
+                  title={isFlipped ? card.name : 'Click to reveal'}
                 >
-                  <PulledCard card={card} rare={rare} interactive={cardsClickable && !isHero} />
+                  <PulledCard
+                    card={card}
+                    rare={rare}
+                    interactive={cardsClickable && !isHero}
+                    flipped={isFlipped}
+                    bestPull={isBestPull}
+                  />
                 </button>
               )
             })}
           </div>
         </div>
 
-        {/* Empty state */}
+        {/* Empty state — no cards linked. Still show the financial outcome
+            (the pack cost is a realized loss when nothing was pulled). */}
         {cards.length === 0 && phase === 'settled' && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none gap-6">
             <div className="text-center text-white/70">
-              <p className="text-lg font-semibold mb-2">No cards linked yet</p>
-              <p className="text-sm text-white/50">Open a card and set its "pulled from" to this pack to see it here.</p>
+              <p className="text-2xl font-bold mb-1.5">No cards pulled</p>
+              <p className="text-sm text-white/40">Nothing was linked to this pack.</p>
+            </div>
+            <div className="pointer-events-auto">
+              <PullSummaryBanner
+                cost={pullSummary.cost}
+                pullValue={pullSummary.pullValue}
+                net={pullSummary.net}
+                pct={pullSummary.pct}
+                packs={pullSummary.packs}
+              />
             </div>
           </div>
         )}
       </div>
+
+      {/* "Open all" — flips every remaining face-down card at once.
+          Visible only in reveal-one mode while flips remain. */}
+      {phase === 'settled' &&
+        revealMode === 'one' &&
+        !allFlipped &&
+        selectedIndex === null &&
+        cards.length > 0 && (
+          <div
+            className="absolute left-1/2 -translate-x-1/2 z-30"
+            style={{ bottom: 32 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={handleOpenAll}
+              className="open-all-btn"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+              Open all
+            </button>
+          </div>
+        )}
+
+      {/* Pull summary banner — the climax. Cost vs pull value, with the
+          net P/L in green or red. Hidden in focused mode (info panel
+          covers that side) and in reveal-one mode until every card is
+          flipped face-up. */}
+      {showSummary && (
+        <PullSummaryBanner
+          cost={pullSummary.cost}
+          pullValue={pullSummary.pullValue}
+          net={pullSummary.net}
+          pct={pullSummary.pct}
+          packs={pullSummary.packs}
+        />
+      )}
 
       {/* Info panel — pops in on the right after the cards have settled
           into the focused layout. */}
@@ -587,6 +824,55 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
           onClose={() => setSelectedIndex(null)}
         />
       )}
+    </div>
+  )
+}
+
+// ─── Pull summary banner — the climax: cost vs pull value ────────────────
+
+function PullSummaryBanner({
+  cost,
+  pullValue,
+  net,
+  pct,
+  packs
+}: {
+  cost: number
+  pullValue: number
+  net: number
+  pct: number | null
+  packs: number
+}) {
+  const positive = net >= 0
+  return (
+    <div
+      className="absolute left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+      style={{ bottom: 28 }}
+    >
+      <div className="pull-summary-banner pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="pull-summary-row">
+          <div className="pull-summary-stat">
+            <div className="pull-summary-label">Cost{packs > 1 ? ` · ${packs} packs` : ''}</div>
+            <div className="pull-summary-value">{formatCurrency(cost)}</div>
+          </div>
+          <div className="pull-summary-arrow">→</div>
+          <div className="pull-summary-stat">
+            <div className="pull-summary-label">Pull value</div>
+            <div className="pull-summary-value">{formatCurrency(pullValue)}</div>
+          </div>
+          <div className={`pull-summary-net ${positive ? 'is-positive' : 'is-negative'}`}>
+            <div className="pull-summary-label">Net</div>
+            <div className="pull-summary-net-value">
+              {positive ? '+' : ''}{formatCurrency(net)}
+              {pct !== null && (
+                <span className="pull-summary-pct">
+                  {' '}({positive ? '+' : ''}{pct.toFixed(1)}%)
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -771,38 +1057,80 @@ function PackArt({ setName }: { setName: string }) {
 
 // ─── Pulled card thumbnail ────────────────────────────────────────────────
 
-function PulledCard({ card, rare, interactive }: { card: InventoryCard; rare: boolean; interactive: boolean }) {
+function PulledCard({
+  card,
+  rare,
+  interactive,
+  flipped = true,
+  bestPull = false
+}: {
+  card: InventoryCard
+  rare: boolean
+  interactive: boolean
+  flipped?: boolean
+  bestPull?: boolean
+}) {
+  // 3D flip container — rotates around the Y axis between face-down and
+  // face-up. Both sides occupy the same space; backface-visibility hides
+  // the side currently facing away from the viewer.
   return (
     <div
       data-card-visual
-      className={`relative w-full h-full rounded-lg overflow-hidden shadow-2xl bg-surface-800 ring-1 ring-white/10 ${rare ? 'pulled-card-rare' : ''} ${interactive ? 'pulled-card-interactive' : ''}`}
-      style={{ aspectRatio: '5 / 7' }}
+      className={`pulled-card-flip ${flipped ? 'is-flipped' : ''}`}
+      style={{ width: '100%', height: '100%' }}
     >
-      {card.image_url ? (
-        <img
-          src={card.image_url}
-          alt={card.name}
-          className="w-full h-full object-cover"
-          loading="lazy"
-        />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center text-white/30 text-xs px-2 text-center">
-          {card.name}
+      <div className="pulled-card-flip-inner">
+        {/* BACK */}
+        <div className="pulled-card-flip-face pulled-card-flip-back">
+          <CardBack />
         </div>
-      )}
-      {rare && (
+        {/* FRONT */}
         <div
-          className="pulled-card-shine pointer-events-none"
-          style={(() => {
-            const p = shineParamsFor(card.id)
-            return {
-              ['--shine-duration' as string]: `${p.duration}s`,
-              ['--shine-delay' as string]: `${p.delay}s`,
-              ['--shine-angle' as string]: `${p.angle}deg`
-            } as React.CSSProperties
-          })()}
-        />
-      )}
+          className={`pulled-card-flip-face pulled-card-flip-front relative rounded-lg overflow-hidden shadow-2xl bg-surface-800 ring-1 ring-white/10 ${rare ? 'pulled-card-rare' : ''} ${interactive ? 'pulled-card-interactive' : ''} ${bestPull ? 'pulled-card-best' : ''}`}
+        >
+          {card.image_url ? (
+            <img
+              src={card.image_url}
+              alt={card.name}
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-white/30 text-xs px-2 text-center">
+              {card.name}
+            </div>
+          )}
+          {rare && (
+            <div
+              className="pulled-card-shine pointer-events-none"
+              style={(() => {
+                const p = shineParamsFor(card.id)
+                return {
+                  ['--shine-duration' as string]: `${p.duration}s`,
+                  ['--shine-delay' as string]: `${p.delay}s`,
+                  ['--shine-angle' as string]: `${p.angle}deg`
+                } as React.CSSProperties
+              })()}
+            />
+          )}
+          {bestPull && <div className="pulled-card-best-glow pointer-events-none" />}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Official Pokémon TCG card back, bundled with the app at
+// src/renderer/src/assets/pokemon_card_back.png.
+function CardBack() {
+  return (
+    <div className="card-back">
+      <img
+        src={pokemonCardBackUrl}
+        alt=""
+        className="card-back-img"
+        draggable={false}
+      />
     </div>
   )
 }
