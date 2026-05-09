@@ -466,7 +466,7 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
               Market Price
               {activeVariant && <span className="ml-1 font-normal normal-case text-surface-400">· {activeVariant.condition} {activeVariant.printing !== 'Normal' ? activeVariant.printing : ''}</span>}
             </span>
-            <p className="text-2xl font-bold font-mono text-surface-900 mt-0.5">${displayedMarketPrice.toFixed(2)}</p>
+            <p className="text-2xl font-semibold text-surface-900 mt-0.5 tabular-nums">${displayedMarketPrice.toFixed(2)}</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -622,7 +622,7 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                             <div className="text-sm font-medium text-surface-900 group-hover:text-black truncate">{product.name}</div>
                             <div className="text-[11px] text-surface-500 truncate">{product.set_name} · {product.pack_count} packs</div>
                           </div>
-                          <div className="text-sm font-mono font-medium text-surface-900">${product.market_price.toFixed(2)}</div>
+                          <div className="text-sm font-medium text-surface-900 tabular-nums">${product.market_price.toFixed(2)}</div>
                         </button>
                       ))}
                     </>
@@ -684,7 +684,7 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
                             <div className="text-sm font-medium text-surface-900 group-hover:text-black truncate">{card.name}</div>
                             <div className="text-[11px] text-surface-500 truncate">{card.set_name} · {card.card_number} · {card.rarity}</div>
                           </div>
-                          <div className="text-sm font-mono font-medium text-surface-900">${card.market_price.toFixed(2)}</div>
+                          <div className="text-sm font-medium text-surface-900 tabular-nums">${card.market_price.toFixed(2)}</div>
                         </button>
                       ))}
                     </>

@@ -971,9 +971,9 @@ function InfoPanel({
 
         <div className="mt-5 rounded-xl p-4 bg-white/5 border border-white/10">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-white/50">Market Price</div>
-          <div className="text-3xl font-bold font-mono text-white mt-1">{formatCurrency(shown.market_price)}</div>
+          <div className="text-3xl font-semibold text-white mt-1 tabular-nums">{formatCurrency(shown.market_price)}</div>
           {shown.quantity > 1 && (
-            <div className="text-xs text-white/50 mt-1 font-mono">
+            <div className="text-xs text-white/50 mt-1 tabular-nums">
               Total value · {formatCurrency(totalMarket)}
             </div>
           )}
@@ -988,11 +988,11 @@ function InfoPanel({
           <div className="mt-3 rounded-xl p-4 bg-white/5 border border-white/10">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-white/50">Unrealized G/L</div>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className={`text-2xl font-bold font-mono ${gl >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+              <span className={`text-2xl font-semibold tabular-nums ${gl >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
                 {gl >= 0 ? '+' : ''}{formatCurrency(gl)}
               </span>
               {glPct !== null && (
-                <span className={`text-sm font-mono ${gl >= 0 ? 'text-emerald-300/80' : 'text-rose-300/80'}`}>
+                <span className={`text-sm tabular-nums ${gl >= 0 ? 'text-emerald-300/80' : 'text-rose-300/80'}`}>
                   {gl >= 0 ? '+' : ''}{glPct.toFixed(2)}%
                 </span>
               )}
@@ -1135,7 +1135,7 @@ function DetailStat({ label, value, subtle }: { label: string; value: string; su
   return (
     <div className={`rounded-lg p-3 bg-white/5 border border-white/10 ${subtle ? 'opacity-70' : ''}`}>
       <div className="text-[10px] font-semibold uppercase tracking-wider text-white/50">{label}</div>
-      <div className="text-base font-bold font-mono text-white mt-1">{value}</div>
+      <div className="text-base font-semibold text-white mt-1 tabular-nums">{value}</div>
     </div>
   )
 }

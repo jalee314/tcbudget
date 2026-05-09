@@ -121,9 +121,9 @@ function StatCard({ label, value, subValue, icon, variant = 'default', headerExt
           </div>
         </div>
       </div>
-      <div className={`text-xl font-bold font-mono ${valueColor} tabular-nums`}>{value}</div>
+      <div className={`text-xl font-semibold ${valueColor} tabular-nums`}>{value}</div>
       {subValue && (
-        <div className="text-[11px] text-surface-500 mt-1 font-mono">{subValue}</div>
+        <div className="text-[11px] text-surface-500 mt-1">{subValue}</div>
       )}
     </div>
   )

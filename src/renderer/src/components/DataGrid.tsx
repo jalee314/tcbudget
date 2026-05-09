@@ -150,7 +150,7 @@ function MarketValueRenderer(props: ICellRendererParams<GridRow>) {
   const data = props.data
   if (!data) return null
   return (
-    <span className="text-surface-900 font-medium text-sm font-mono">
+    <span className="text-surface-900 font-medium text-sm tabular-nums">
       {formatCurrency(data.market_price * data.quantity)}
     </span>
   )
@@ -175,7 +175,7 @@ function PurchasePriceRenderer(props: ICellRendererParams<GridRow>) {
     )
   }
   return (
-    <span className={`text-sm font-mono ${isGroup ? 'text-surface-500 italic' : 'text-surface-700'}`}>
+    <span className={`text-sm tabular-nums ${isGroup ? 'text-surface-500 italic' : 'text-surface-700'}`}>
       {formatCurrency(data.purchase_price)}
     </span>
   )
@@ -189,7 +189,7 @@ function CostBasisRenderer(props: ICellRendererParams<GridRow>) {
     return <span className="text-surface-400" title="Gifted (no cost)">—</span>
   }
   return (
-    <span className={`text-sm font-mono ${isGroup ? 'text-surface-500 italic' : 'text-surface-700'}`}>
+    <span className={`text-sm tabular-nums ${isGroup ? 'text-surface-500 italic' : 'text-surface-700'}`}>
       {formatCurrency(data.purchase_price * data.quantity)}
     </span>
   )
@@ -211,7 +211,7 @@ function makePriceChangeRenderer(getMode: () => DisplayMode) {
     const mode = getMode()
     const colorClass = delta === 0 ? 'text-surface-500' : isPositive ? 'text-gain' : 'text-loss'
     return (
-      <span className={`text-sm font-medium font-mono ${colorClass}`}>
+      <span className={`text-sm font-medium tabular-nums ${colorClass}`}>
         {mode === '$'
           ? `${isPositive && delta !== 0 ? '+' : ''}${formatCurrency(delta)}`
           : pct == null ? '—' : `${isPositive && pct !== 0 ? '+' : ''}${pct.toFixed(2)}%`}
@@ -235,7 +235,7 @@ function makeTotalGLRenderer(getMode: () => DisplayMode) {
     const mode = getMode()
     const colorClass = gl === 0 ? 'text-surface-500' : isPositive ? 'text-gain' : 'text-loss'
     return (
-      <span className={`text-sm font-medium font-mono ${colorClass}`}>
+      <span className={`text-sm font-medium tabular-nums ${colorClass}`}>
         {mode === '$'
           ? `${isPositive && gl !== 0 ? '+' : ''}${formatCurrency(gl)}`
           : pct == null ? '—' : `${isPositive && pct !== 0 ? '+' : ''}${pct.toFixed(2)}%`}
@@ -277,7 +277,7 @@ function makeSaleRenderer(getMode: () => DisplayMode) {
       : pct == null ? '—' : `${isPositive && pct !== 0 ? '+' : ''}${pct.toFixed(1)}%`
 
     return (
-      <div className="flex items-baseline gap-1.5 font-mono">
+      <div className="flex items-baseline gap-1.5 tabular-nums">
         <span className="text-surface-900 font-medium text-sm">{formatCurrency(total)}</span>
         <span className={`text-xs ${glClass}`}>({glText})</span>
       </div>
@@ -650,7 +650,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       hide: hiddenColumns.has('quantity'),
       editable: (params) => !params.data?.__isGroup,
       cellDataType: 'number',
-      cellClass: 'text-center font-mono'
+      cellClass: 'text-center tabular-nums'
     },
     {
       headerName: 'PRICE CHANGE',
@@ -784,7 +784,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       minWidth: 95,
       hide: hiddenColumns.has('purchase_date'),
       editable: (params) => !params.data?.__isGroup,
-      cellClass: 'text-surface-500 text-xs font-mono'
+      cellClass: 'text-surface-500 text-xs tabular-nums'
     },
     {
       headerName: 'Notes',
@@ -889,7 +889,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
             className="input-dark !pl-10 py-2 text-sm"
           />
         </div>
-        <span className="text-xs text-surface-500 font-mono">
+        <span className="text-xs text-surface-500 tabular-nums">
           {filteredByType.length} {filteredByType.length === 1 ? 'item' : 'items'}
         </span>
 

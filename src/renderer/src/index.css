@@ -17,7 +17,7 @@ html, body, #root {
 body {
   background: #F3F4F6;
   color: #111827;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Public Sans', system-ui, -apple-system, sans-serif;
 }
 
 /* ─── Custom Scrollbar ────────────────────────────────────────────────── */
@@ -80,7 +80,7 @@ body {
   --ag-cell-horizontal-border: 1px solid #F3F4F6;
   --ag-input-focus-border-color: #16A34A;
   --ag-checkbox-checked-color: #16A34A;
-  --ag-font-family: 'Inter', system-ui, sans-serif;
+  --ag-font-family: 'Public Sans', system-ui, sans-serif;
   --ag-font-size: 13px;
   --ag-grid-size: 6px;
   --ag-row-height: 52px;
@@ -690,7 +690,7 @@ body {
 }
 
 .pull-summary-value {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 18px;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.95);
@@ -726,7 +726,7 @@ body {
 }
 
 .pull-summary-net-value {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 20px;
   font-weight: 800;
   margin-top: 2px;
