@@ -527,30 +527,51 @@ function getMacIconPath(): string | undefined {
 
 function createWindow(): void {
   const windowsIconPath = getWindowsIconPath()
-  const macTrafficLights = process.platform === 'darwin'
-    ? { x: 16, y: 14 }
-    : undefined
+  const isMac = process.platform === 'darwin'
+  const isWindows = process.platform === 'win32'
 
-  const mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1024,
-    minHeight: 700,
-    show: false,
-    backgroundColor: '#F3F4F6',
-    titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#F3F4F6',
-      symbolColor: '#111827',
-      height: 40
-    },
-    trafficLightPosition: macTrafficLights,
-    icon: windowsIconPath,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
-    }
-  })
+  let mainWindow: BrowserWindow
+  try {
+    mainWindow = new BrowserWindow({
+      width: 1440,
+      height: 900,
+      minWidth: 1024,
+      minHeight: 700,
+      show: false,
+      backgroundColor: '#F3F4F6',
+      titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
+      ...(isWindows && {
+        titleBarOverlay: {
+          color: '#F3F4F6',
+          symbolColor: '#111827',
+          height: 40
+        }
+      }),
+      ...(isMac && {
+        trafficLightPosition: { x: 16, y: 14 }
+      }),
+      icon: windowsIconPath,
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        sandbox: false
+      }
+    })
+  } catch (err: any) {
+    console.error('[Main] Failed to create custom window, falling back:', err?.message ?? err)
+    mainWindow = new BrowserWindow({
+      width: 1440,
+      height: 900,
+      minWidth: 1024,
+      minHeight: 700,
+      show: false,
+      backgroundColor: '#F3F4F6',
+      icon: windowsIconPath,
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        sandbox: false
+      }
+    })
+  }
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
@@ -594,7 +615,11 @@ app.whenReady().then(() => {
 
   const macIconPath = getMacIconPath()
   if (macIconPath && process.platform === 'darwin') {
-    app.dock?.setIcon(macIconPath)
+    try {
+      app.dock?.setIcon(macIconPath)
+    } catch (err: any) {
+      console.error('[Main] Failed to set dock icon:', err?.message ?? err)
+    }
   }
 
   app.on('browser-window-created', (_, window) => {

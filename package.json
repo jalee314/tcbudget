@@ -8,7 +8,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
+    "dist": "npm run build && electron-builder --publish never",
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps"
   },
