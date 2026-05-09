@@ -360,6 +360,20 @@ export default function App() {
       ))
       return
     }
+    // For single-quantity items skip the modal and mark sold immediately
+    if (card.quantity === 1) {
+      const saleDate = new Date().toISOString().split('T')[0]
+      const salePrice = card.market_price ?? 0
+      if (window.electronAPI) {
+        window.electronAPI.db.update(card.id, 'is_sold', 1).catch(console.error)
+        window.electronAPI.db.update(card.id, 'sale_price', salePrice).catch(console.error)
+        window.electronAPI.db.update(card.id, 'sale_date', saleDate).catch(console.error)
+      }
+      setInventory(prev => prev.map(c =>
+        c.id === card.id ? { ...c, is_sold: 1, sale_price: salePrice, sale_date: saleDate } : c
+      ))
+      return
+    }
     // Marking as sold — open modal to collect qty + price
     setSellingCard(card)
   }, [])

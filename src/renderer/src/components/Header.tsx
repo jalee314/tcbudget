@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 
+const DARK_MODE_KEY = 'tcbudget_dark_mode_v1'
+
 interface HeaderProps {
   onAddCard: () => void
   onRefreshPrices: () => void
@@ -12,6 +14,22 @@ interface HeaderProps {
 export default function Header({ onAddCard, onRefreshPrices, onExportCsv, onExportDb, onImportDb, isRefreshing }: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    try { return localStorage.getItem(DARK_MODE_KEY) === '1' } catch { return false }
+  })
+
+  useEffect(() => {
+    if (isDark) document.documentElement.setAttribute('data-theme', 'dark')
+    else document.documentElement.removeAttribute('data-theme')
+  }, [isDark])
+
+  const toggleDark = () => {
+    setIsDark(d => {
+      const next = !d
+      try { localStorage.setItem(DARK_MODE_KEY, next ? '1' : '0') } catch { /* ignore */ }
+      return next
+    })
+  }
   const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent)
   const headerClassName = isMac
     ? 'titlebar-drag flex items-center justify-between pl-[88px] pr-5 py-2 min-h-[56px] border-b border-surface-200'
@@ -71,6 +89,27 @@ export default function Header({ onAddCard, onRefreshPrices, onExportCsv, onExpo
             <path d="M16 16h5v5"/>
           </svg>
           {isRefreshing ? 'Syncing…' : 'Refresh'}
+        </button>
+        <button onClick={toggleDark}
+          className="btn-ghost flex items-center justify-center w-9 h-9 !p-0"
+          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {isDark ? (
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v2"/><path d="M12 20v2"/>
+              <path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/>
+              <path d="M2 12h2"/><path d="M20 12h2"/>
+              <path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+          )}
         </button>
         <div className="relative" ref={menuRef}>
           <button

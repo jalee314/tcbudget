@@ -75,6 +75,44 @@ function tcgplayerImageUrl(tcgplayerId: string | null | undefined): string {
   return `https://product-images.tcgplayer.com/fit-in/400x550/${tcgplayerId}.jpg`
 }
 
+// TYPE_KEYWORDS maps query words → required name words.
+// When a query contains one of these words, results that DON'T contain the
+// corresponding name word are penalised so they don't beat the correct product.
+const TYPE_KEYWORDS: { query: RegExp; required: string }[] = [
+  { query: /\bbundle\b/i, required: 'bundle' },
+  { query: /\bbox\b/i,    required: 'box'    },
+  { query: /\betb\b|\belite\s*trainer\b/i, required: 'elite trainer' },
+  { query: /\btin\b/i,    required: 'tin'    },
+]
+
+function rankSealedResults(products: SealedProduct[], query: string): SealedProduct[] {
+  const q = query.toLowerCase()
+  const qWords = q.split(/\s+/).filter(Boolean)
+
+  return [...products].sort((a, b) => {
+    const na = a.name.toLowerCase()
+    const nb = b.name.toLowerCase()
+
+    const scoreOne = (name: string) => {
+      let s = 0
+      // Exact full-name match
+      if (name === q) s += 100
+      // Name contains the entire query string
+      else if (name.includes(q)) s += 50
+      // Count individual query words present in the name
+      else s += qWords.filter(w => name.includes(w)).length * 10
+
+      // Penalise results that are missing a type keyword the query has
+      for (const { query: rx, required } of TYPE_KEYWORDS) {
+        if (rx.test(q) && !name.includes(required)) s -= 25
+      }
+      return s
+    }
+
+    return scoreOne(nb) - scoreOne(na)
+  })
+}
+
 function mapSealedProduct(raw: any): SealedProduct {
   const sealedVariant = (raw.variants ?? []).find((v: any) => v.condition === 'Sealed') ?? raw.variants?.[0]
   return {
@@ -328,7 +366,8 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
           setSealedError(res.error)
           setSealedResults([])
         } else {
-          setSealedResults((res.data as any[]).map(mapSealedProduct))
+          const mapped = (res.data as any[]).map(mapSealedProduct)
+          setSealedResults(rankSealedResults(mapped, sealedQuery))
         }
       } catch (err: any) {
         setSealedError(err?.message ?? 'Search failed')

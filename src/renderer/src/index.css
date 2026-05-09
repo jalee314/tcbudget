@@ -207,6 +207,12 @@ body {
   border-color: rgba(236, 72, 153, 0.25);
 }
 
+.badge-pulled {
+  background: rgba(14, 165, 233, 0.1);
+  color: #0369A1;
+  border-color: rgba(14, 165, 233, 0.25);
+}
+
 .badge-neutral {
   background: rgba(148, 163, 184, 0.15);
   color: #475569;
@@ -1096,3 +1102,105 @@ button:hover > .pulled-card-interactive.pulled-card-rare {
   45% { background-position: -120% -120%; }
   100% { background-position: -120% -120%; }
 }
+
+/* ─── Dark Mode ─────────────────────────────────────────────────────────── */
+/* Activated by setting `data-theme="dark"` on <html>. Overrides the major
+   surfaces and the most common Tailwind utility classes used across the app
+   so existing components flip without per-component edits. */
+
+[data-theme="dark"] body {
+  background: #000000;
+  color: #E5E7EB;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(229, 231, 235, 0.2);
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(229, 231, 235, 0.4);
+}
+
+[data-theme="dark"] .glass-card,
+[data-theme="dark"] .glass-card-subtle {
+  background: #0E0E0E;
+  border-color: #1F1F1F;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"] header.titlebar-drag {
+  background: #000000;
+  border-bottom-color: #1F1F1F !important;
+}
+
+/* AG Grid theme variables (overrides --ag-* CSS vars) */
+[data-theme="dark"] .ag-theme-custom-light {
+  --ag-background-color: #050505;
+  --ag-foreground-color: #E5E7EB;
+  --ag-header-background-color: #0E0E0E;
+  --ag-header-foreground-color: #9CA3AF;
+  --ag-header-cell-hover-background-color: rgba(255, 255, 255, 0.04);
+  --ag-odd-row-background-color: #0A0A0A;
+  --ag-row-hover-color: rgba(255, 255, 255, 0.03);
+  --ag-border-color: #1F1F1F;
+  --ag-row-border-color: #1A1A1A;
+  --ag-cell-horizontal-border: 1px solid #1A1A1A;
+}
+[data-theme="dark"] .ag-theme-custom-light .ag-header {
+  border-bottom-color: #1F1F1F !important;
+}
+[data-theme="dark"] .ag-theme-custom-light .ag-cell-inline-editing {
+  background: #1A1A1A !important;
+}
+
+/* Buttons */
+[data-theme="dark"] .btn-ghost {
+  background: #0E0E0E;
+  color: #D1D5DB;
+  border-color: #262626;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+[data-theme="dark"] .btn-ghost:hover {
+  background: #1A1A1A;
+  border-color: #404040;
+  color: #F3F4F6;
+}
+[data-theme="dark"] .btn-primary {
+  color: #062B14;
+}
+
+/* Inputs */
+[data-theme="dark"] .input-dark {
+  background: #141414;
+  border-color: #262626;
+  color: #F3F4F6;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+[data-theme="dark"] .input-dark::placeholder {
+  color: #6B7280;
+}
+
+/* Tailwind utility overrides — backgrounds */
+[data-theme="dark"] .bg-white { background-color: #0E0E0E !important; }
+[data-theme="dark"] .bg-surface-50 { background-color: #0A0A0A !important; }
+[data-theme="dark"] .bg-surface-100 { background-color: #1A1A1A !important; }
+[data-theme="dark"] .bg-surface-200 { background-color: #262626 !important; }
+
+/* Tailwind utility overrides — text colors (only on light pages, not the
+   already-dark pack-open overlay which uses .text-white/* directly) */
+[data-theme="dark"] .text-surface-900 { color: #F3F4F6 !important; }
+[data-theme="dark"] .text-surface-800 { color: #E5E7EB !important; }
+[data-theme="dark"] .text-surface-700 { color: #D1D5DB !important; }
+[data-theme="dark"] .text-surface-600 { color: #9CA3AF !important; }
+[data-theme="dark"] .text-surface-500 { color: #9CA3AF !important; }
+[data-theme="dark"] .text-surface-400 { color: #6B7280 !important; }
+[data-theme="dark"] .text-surface-300 { color: #525252 !important; }
+
+/* Tailwind utility overrides — borders */
+[data-theme="dark"] .border-surface-100 { border-color: #1A1A1A !important; }
+[data-theme="dark"] .border-surface-200 { border-color: #262626 !important; }
+[data-theme="dark"] .border-surface-300 { border-color: #404040 !important; }
+
+/* Hover variants used in menus / buttons */
+[data-theme="dark"] .hover\:bg-surface-50:hover { background-color: #1A1A1A !important; }
+[data-theme="dark"] .hover\:bg-surface-100:hover { background-color: #262626 !important; }
+[data-theme="dark"] .hover\:bg-white:hover { background-color: #1A1A1A !important; }

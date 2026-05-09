@@ -117,19 +117,51 @@ function saveCachedPackImage(setKey: string, url: string): void {
   }
 }
 
+// Anything containing one of these is NOT the booster pack we want to show.
+// Includes obvious non-packs (box/bundle/etb) AND look-alikes that often ride
+// along with a pack listing — art cards, code cards, sleeves — which would
+// otherwise pass a naive "name contains booster" check.
 const NON_PACK_KEYWORDS = [
   'box', 'bundle', 'blister', 'elite trainer', 'etb',
   'build & battle', 'build and battle', 'premium collection',
-  'case', 'display', 'tin', 'collection box', 'mini tin', 'binder'
+  'case', 'display', 'tin', 'collection box', 'mini tin', 'binder',
+  'art card', 'code card', 'promo card', 'sleeve', 'damage counter',
+  'coin', 'energy pack', 'theme deck', 'starter deck', 'deck box',
+  'playmat', 'pin', 'figure', 'plush', 'token'
 ]
 
 function isSingleBoosterPack(name: string): boolean {
   const n = name.toLowerCase()
-  if (!n.includes('booster') && !n.includes('pack')) return false
+  // Must mention booster (the word "pack" alone is too loose — "art pack",
+  // "energy pack" etc. would slip through).
+  if (!/\bbooster\b/.test(n)) return false
   for (const kw of NON_PACK_KEYWORDS) {
     if (n.includes(kw)) return false
   }
   return true
+}
+
+// Higher score = more likely to be the canonical booster pack for this set.
+function scoreBoosterPackCandidate(raw: any, setName: string): number {
+  const n = String(raw?.name ?? '').toLowerCase()
+  const setN = String(raw?.set_name ?? raw?.set ?? '').toLowerCase()
+  const s = setName.toLowerCase()
+
+  let score = 0
+  // Strong: name contains the exact "booster pack" phrase
+  if (n.includes('booster pack')) score += 100
+  else if (/\bbooster\b/.test(n)) score += 40
+
+  // Set match
+  if (setN === s) score += 60
+  else if (setN.includes(s) || s.includes(setN)) score += 30
+  if (n.includes(s)) score += 25
+
+  // Penalty for noise tokens that sometimes leak through (variants, special
+  // editions etc.) — we want the plain "Set Booster Pack", not a re-cut.
+  if (/\b(jumbo|stamped|reverse|special|preview|prerelease)\b/.test(n)) score -= 15
+
+  return score
 }
 
 function tcgplayerImageUrl(tcgplayerId: string | null | undefined): string {
@@ -139,42 +171,44 @@ function tcgplayerImageUrl(tcgplayerId: string | null | undefined): string {
 
 async function fetchBoosterPackImage(setName: string): Promise<string | null> {
   if (!setName) return null
-  // electronAPI may not exist in dev (e.g. browser preview)
   const api = (window as any).electronAPI
   if (!api?.justtcg?.searchSealed) return null
 
-  // Try a few queries — set + booster pack first (most specific), then just set
+  // Aggregate candidates from a specific query and a broad fallback,
+  // de-duplicated by tcgplayerId, then pick the highest-scoring single pack.
   const queries = [`${setName} booster pack`, setName]
-  const seen = new Set<string>()
+  const candidates: any[] = []
+  const seenIds = new Set<string>()
+
   for (const q of queries) {
     try {
       const result = await api.justtcg.searchSealed(q)
       if (result?.error || !result?.data) continue
-      const candidates = (result.data as any[]).filter(raw => {
-        const name = String(raw?.name ?? '')
-        if (seen.has(name)) return false
-        seen.add(name)
-        return isSingleBoosterPack(name)
-      })
-      // Prefer one whose set name matches closely
-      const lowerSet = setName.toLowerCase()
-      const exact = candidates.find(raw => {
-        const setN = String(raw?.set_name ?? raw?.set ?? '').toLowerCase()
-        return setN === lowerSet
-      })
-      const partial = candidates.find(raw => {
-        const setN = String(raw?.set_name ?? raw?.set ?? '').toLowerCase()
-        return setN.includes(lowerSet) || lowerSet.includes(setN)
-      })
-      const match = exact ?? partial ?? candidates[0]
-      if (match?.tcgplayerId) {
-        return tcgplayerImageUrl(match.tcgplayerId)
+      for (const raw of result.data as any[]) {
+        const id = String(raw?.tcgplayerId ?? raw?.id ?? '')
+        if (!id || seenIds.has(id)) continue
+        if (!isSingleBoosterPack(String(raw?.name ?? ''))) continue
+        seenIds.add(id)
+        candidates.push(raw)
       }
     } catch (err) {
       console.warn('[PackOpenAnimation] booster pack lookup failed:', err)
     }
   }
-  return null
+
+  if (candidates.length === 0) return null
+
+  let best: any = null
+  let bestScore = -Infinity
+  for (const raw of candidates) {
+    const score = scoreBoosterPackCandidate(raw, setName)
+    if (score > bestScore) {
+      bestScore = score
+      best = raw
+    }
+  }
+
+  return best?.tcgplayerId ? tcgplayerImageUrl(best.tcgplayerId) : null
 }
 
 function preloadImage(url: string): Promise<boolean> {
@@ -818,6 +852,7 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
       {layoutMode === 'focused' && cards[selectedIndex!] && (
         <InfoPanel
           card={cards[selectedIndex!]}
+          flipped={revealMode === 'all' || flippedCardIds.has(cards[selectedIndex!].id)}
           index={selectedIndex!}
           total={cards.length}
           navTick={navTick}
@@ -882,6 +917,7 @@ function PullSummaryBanner({
 
 function InfoPanel({
   card,
+  flipped,
   index,
   total,
   navTick,
@@ -889,6 +925,7 @@ function InfoPanel({
   onClose
 }: {
   card: InventoryCard
+  flipped: boolean
   index: number
   total: number
   navTick: number
@@ -896,24 +933,31 @@ function InfoPanel({
   onClose: () => void
 }) {
   const [visible, setVisible] = useState(false)
-  // Buffer the displayed card / index so the panel keeps showing the
-  // PREVIOUS card while it fades out, then swaps to the new card only
-  // once the cards have finished sliding. Without this, the user would
-  // briefly see the new card's text flash before the cards arrive.
+  // Buffer the displayed card / index / flipped state so the panel keeps
+  // showing the PREVIOUS card while it fades out, then swaps to the new
+  // card only once the cards have finished sliding.
   const [displayCard, setDisplayCard] = useState(card)
   const [displayIndex, setDisplayIndex] = useState(index)
+  const [displayFlipped, setDisplayFlipped] = useState(flipped)
 
   useEffect(() => {
     setVisible(false)
     const t = setTimeout(() => {
       setDisplayCard(card)
       setDisplayIndex(index)
+      setDisplayFlipped(flipped)
       setVisible(true)
     }, 540)
     return () => clearTimeout(t)
     // navTick is the canonical "user navigated" signal — runs once per nav
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navTick])
+
+  // If the user flips the currently-displayed card (no nav), update right
+  // away so the placeholder swaps for the real details immediately.
+  useEffect(() => {
+    if (displayCard.id === card.id) setDisplayFlipped(flipped)
+  }, [flipped, card.id, displayCard.id])
 
   const shown = displayCard
   const shownIndex = displayIndex
@@ -941,6 +985,33 @@ function InfoPanel({
         } as React.CSSProperties}
         onClick={(e) => e.stopPropagation()}
       >
+        {!displayFlipped ? (
+          <div className="text-center py-12">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">
+              Card {shownIndex + 1} / {total}
+            </span>
+            <div className="mt-6 flex flex-col items-center gap-3">
+              <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/40">
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                <path d="M21 3v5h-5"/>
+                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                <path d="M8 16H3v5"/>
+              </svg>
+              <p className="text-2xl font-semibold text-white/80">Flip to reveal</p>
+              <p className="text-sm text-white/40">Click the card to turn it over</p>
+            </div>
+            <div className="mt-8 flex items-center justify-center gap-3">
+              <button
+                onClick={(e) => { e.stopPropagation(); onClose() }}
+                className="px-3 py-1.5 text-xs font-semibold text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-md transition-colors"
+              >
+                Back to fan
+              </button>
+              <span className="text-[11px] text-white/30">← → keys · Esc to close</span>
+            </div>
+          </div>
+        ) : (
+        <>
         <div className="flex items-center justify-between mb-2">
           <p className="text-xs text-white/50 uppercase tracking-wider font-semibold">{shown.set_name}</p>
           <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">
@@ -1020,6 +1091,8 @@ function InfoPanel({
           </button>
           <span className="text-[11px] text-white/30">← → keys · Esc to close</span>
         </div>
+        </>
+        )}
       </div>
     </div>
   )

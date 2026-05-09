@@ -161,6 +161,18 @@ function PurchasePriceRenderer(props: ICellRendererParams<GridRow>) {
   if (!data) return null
   const isGroup = !!data.__isGroup
   if (data.purchase_price === 0 && !isGroup) {
+    if (data.parent_id) {
+      return (
+        <span className="badge badge-pulled" title="Pulled from a set — no purchase cost">
+          <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <polyline points="3.29 7 12 12 20.71 7"/>
+            <line x1="12" y1="22" x2="12" y2="12"/>
+          </svg>
+          Pulled
+        </span>
+      )
+    }
     return (
       <span className="badge badge-gift" title="Gifted — no purchase cost">
         <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -186,7 +198,8 @@ function CostBasisRenderer(props: ICellRendererParams<GridRow>) {
   if (!data) return null
   const isGroup = !!data.__isGroup
   if (data.purchase_price === 0 && !isGroup) {
-    return <span className="text-surface-400" title="Gifted (no cost)">—</span>
+    const title = data.parent_id ? 'Pulled (no cost)' : 'Gifted (no cost)'
+    return <span className="text-surface-400" title={title}>—</span>
   }
   return (
     <span className={`text-sm tabular-nums ${isGroup ? 'text-surface-500 italic' : 'text-surface-700'}`}>
@@ -244,16 +257,16 @@ function makeTotalGLRenderer(getMode: () => DisplayMode) {
   }
 }
 
-function ToggleHeader(props: IHeaderParams & { mode: DisplayMode; onToggle: () => void; label: string }) {
+function ToggleHeader(props: IHeaderParams & { modeRef: React.MutableRefObject<DisplayMode>; onToggle: () => void; label: string }) {
   return (
     <button
       onClick={(e) => { e.stopPropagation(); props.onToggle() }}
       className="flex items-center gap-1 w-full h-full text-left hover:text-surface-900 transition-colors"
-      title={`Show as ${props.mode === '$' ? 'percentage' : 'dollars'}`}
+      title={`Show as ${props.modeRef.current === '$' ? 'percentage' : 'dollars'}`}
     >
       <span>{props.label}</span>
       <span className="text-[10px] font-bold px-1 py-0.5 rounded bg-surface-100 text-surface-500">
-        {props.mode === '$' ? '$' : '%'}
+        {props.modeRef.current === '$' ? '$' : '%'}
       </span>
     </button>
   )
@@ -288,9 +301,7 @@ function makeSaleRenderer(getMode: () => DisplayMode) {
 function StatusRenderer(props: ICellRendererParams<GridRow>) {
   const data = props.data
   if (!data) return null
-  if (data.__isGroup) {
-    return <span className="badge badge-neutral">Lots</span>
-  }
+  if (data.__isGroup) return <span className="badge badge-neutral">Lots</span>
   const isSold = !!data.is_sold
   const isOpened = data.is_opened === 1 && !isSold
   const isKept = data.is_kept === 1 && !isSold && !isOpened
@@ -429,9 +440,9 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => new Set(DEFAULT_HIDDEN))
   const [showColumnMenu, setShowColumnMenu] = useState(false)
   const columnMenuRef = useRef<HTMLDivElement>(null)
-  const [priceChangeMode, setPriceChangeMode] = useState<DisplayMode>('$')
-  const [totalGLMode, setTotalGLMode] = useState<DisplayMode>('$')
-  const [salePriceMode, setSalePriceMode] = useState<DisplayMode>('$')
+  const priceChangeModeRef = useRef<DisplayMode>('$')
+  const totalGLModeRef = useRef<DisplayMode>('$')
+  const salePriceModeRef = useRef<DisplayMode>('$')
 
   const toggleColumn = useCallback((colId: string) => {
     setHiddenColumns(prev => {
@@ -457,16 +468,23 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
     gridRef.current?.api?.sizeColumnsToFit()
   }, [hiddenColumns])
 
-  // Refresh price-change/total-gl cells when their display mode flips
-  useEffect(() => {
+  const handlePriceChangeModeToggle = useCallback(() => {
+    priceChangeModeRef.current = priceChangeModeRef.current === '$' ? '%' : '$'
     gridRef.current?.api?.refreshCells({ columns: ['price_change'], force: true })
-  }, [priceChangeMode])
-  useEffect(() => {
+    gridRef.current?.api?.refreshHeader()
+  }, [])
+
+  const handleTotalGLModeToggle = useCallback(() => {
+    totalGLModeRef.current = totalGLModeRef.current === '$' ? '%' : '$'
     gridRef.current?.api?.refreshCells({ columns: ['total_gl'], force: true })
-  }, [totalGLMode])
-  useEffect(() => {
+    gridRef.current?.api?.refreshHeader()
+  }, [])
+
+  const handleSalePriceModeToggle = useCallback(() => {
+    salePriceModeRef.current = salePriceModeRef.current === '$' ? '%' : '$'
     gridRef.current?.api?.refreshCells({ columns: ['sale_price'], force: true })
-  }, [salePriceMode])
+    gridRef.current?.api?.refreshHeader()
+  }, [])
 
   // Click on grid wrapper background → clear cell focus
   useEffect(() => {
@@ -593,9 +611,9 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
     onReorder(orderedIds)
   }, [onReorder])
 
-  const priceChangeRenderer = useMemo(() => makePriceChangeRenderer(() => priceChangeMode), [priceChangeMode])
-  const totalGLRenderer = useMemo(() => makeTotalGLRenderer(() => totalGLMode), [totalGLMode])
-  const saleRenderer = useMemo(() => makeSaleRenderer(() => salePriceMode), [salePriceMode])
+  const priceChangeRenderer = useMemo(() => makePriceChangeRenderer(() => priceChangeModeRef.current), [])
+  const totalGLRenderer = useMemo(() => makeTotalGLRenderer(() => totalGLModeRef.current), [])
+  const saleRenderer = useMemo(() => makeSaleRenderer(() => salePriceModeRef.current), [])
 
   const columnDefs = useMemo<ColDef<GridRow>[]>(() => [
     {
@@ -661,8 +679,8 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       cellRenderer: priceChangeRenderer,
       headerComponent: ToggleHeader,
       headerComponentParams: {
-        mode: priceChangeMode,
-        onToggle: () => setPriceChangeMode(m => m === '$' ? '%' : '$'),
+        modeRef: priceChangeModeRef,
+        onToggle: handlePriceChangeModeToggle,
         label: 'PRICE CHANGE'
       },
       sortable: true,
@@ -698,7 +716,12 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       editable: (params) => !params.data?.__isGroup,
       cellDataType: 'number',
       cellRenderer: PurchasePriceRenderer,
-      sortable: true
+      sortable: true,
+      cellStyle: (params) => {
+        const d = params.data
+        const center = d && d.purchase_price === 0 && !d.__isGroup
+        return { lineHeight: 'normal', overflow: 'hidden', justifyContent: center ? 'center' : 'flex-start' }
+      }
     },
     {
       headerName: 'COST BASIS',
@@ -723,8 +746,8 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       cellRenderer: totalGLRenderer,
       headerComponent: ToggleHeader,
       headerComponentParams: {
-        mode: totalGLMode,
-        onToggle: () => setTotalGLMode(m => m === '$' ? '%' : '$'),
+        modeRef: totalGLModeRef,
+        onToggle: handleTotalGLModeToggle,
         label: 'TOTAL G/L'
       },
       sortable: true,
@@ -738,11 +761,12 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       headerName: 'Status',
       colId: 'status',
       cellRenderer: StatusRenderer,
-      width: 95,
-      minWidth: 85,
+      width: 105,
+      minWidth: 90,
       hide: hiddenColumns.has('status'),
       filter: false,
       sortable: true,
+      cellStyle: { lineHeight: 'normal', justifyContent: 'center', overflow: 'hidden' },
       valueGetter: (params) => {
         const d = params.data
         if (!d || d.__isGroup) return ''
@@ -764,8 +788,8 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       cellRenderer: saleRenderer,
       headerComponent: ToggleHeader,
       headerComponentParams: {
-        mode: salePriceMode,
-        onToggle: () => setSalePriceMode(m => m === '$' ? '%' : '$'),
+        modeRef: salePriceModeRef,
+        onToggle: handleSalePriceModeToggle,
         label: 'SALE PRICE'
       },
       tooltipValueGetter: (params) => {
@@ -815,7 +839,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       sortable: false,
       filter: false
     }
-  ], [onDeleteRow, onToggleSold, onToggleOpened, onToggleKeep, onViewContents, onEditPulledFrom, toggleGroup, hiddenColumns, priceChangeRenderer, totalGLRenderer, saleRenderer, priceChangeMode, totalGLMode, salePriceMode])
+  ], [onDeleteRow, onToggleSold, onToggleOpened, onToggleKeep, onViewContents, onEditPulledFrom, toggleGroup, hiddenColumns, priceChangeRenderer, totalGLRenderer, saleRenderer, handlePriceChangeModeToggle, handleTotalGLModeToggle, handleSalePriceModeToggle])
 
   const defaultColDef = useMemo<ColDef>(() => ({
     sortable: true,

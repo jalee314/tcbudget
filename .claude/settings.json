@@ -1,10 +1,11 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(npx electron-vite *)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"
+    ],
     "additionalDirectories": [
       "C:\\Users\\jason\\tcbudget\\src\\renderer\\src\\assets"
-    ],
-    "allow": [
-      "Bash(npx electron-vite *)"
     ]
   }
 }
