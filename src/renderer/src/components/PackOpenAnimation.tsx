@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { InventoryCard } from '../types'
 import { loadMutePref, saveMutePref, playPackTear, playCardFlip, playRareDing, playBestPullChime, playRevealAll } from '../utils/packSounds'
+import { CardImage } from '../utils/cardImage'
 import pokemonCardBackUrl from '../assets/pokemon_card_back.jpg'
 
 const REVEAL_MODE_KEY = 'pack_open_reveal_mode_v1'
@@ -1088,18 +1089,13 @@ function PulledCard({
         <div
           className={`pulled-card-flip-face pulled-card-flip-front relative rounded-lg overflow-hidden shadow-2xl bg-surface-800 ring-1 ring-white/10 ${rare ? 'pulled-card-rare' : ''} ${interactive ? 'pulled-card-interactive' : ''} ${bestPull ? 'pulled-card-best' : ''}`}
         >
-          {card.image_url ? (
-            <img
-              src={card.image_url}
-              alt={card.name}
-              className="w-full h-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-white/30 text-xs px-2 text-center">
-              {card.name}
-            </div>
-          )}
+          <CardImage
+            src={card.image_url}
+            setId={card.set_id}
+            name={card.name}
+            alt={card.name}
+            className="w-full h-full object-cover"
+          />
           {rare && (
             <div
               className="pulled-card-shine pointer-events-none"

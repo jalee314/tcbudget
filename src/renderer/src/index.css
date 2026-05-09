@@ -853,13 +853,27 @@ body {
 }
 
 /* ─── Best-pull highlight ─────────────────────────────────────────── */
-/* Elegant gold aura — no badge text. The card itself is the statement. */
+/* Elegant gold aura — no badge text. The card itself is the statement.
+   The ring itself gently pulses so the border reads as a soft glow. */
 .pulled-card-best {
-  box-shadow:
-    0 0 0 1.5px rgba(252, 211, 77, 0.75),
-    0 0 28px rgba(252, 211, 77, 0.45),
-    0 0 80px rgba(252, 211, 77, 0.22),
-    0 18px 44px rgba(0, 0, 0, 0.6);
+  animation: bestPullBorder 2.4s ease-in-out infinite;
+}
+
+@keyframes bestPullBorder {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1.5px rgba(252, 211, 77, 0.7),
+      0 0 18px rgba(252, 211, 77, 0.35),
+      0 0 60px rgba(252, 211, 77, 0.18),
+      0 18px 44px rgba(0, 0, 0, 0.6);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2.5px rgba(252, 211, 77, 1),
+      0 0 36px rgba(252, 211, 77, 0.6),
+      0 0 96px rgba(252, 211, 77, 0.3),
+      0 18px 44px rgba(0, 0, 0, 0.6);
+  }
 }
 
 .pulled-card-best-glow {
