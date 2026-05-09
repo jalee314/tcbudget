@@ -515,8 +515,21 @@ function getWindowsIconPath(): string | undefined {
   return existsSync(iconPath) ? iconPath : undefined
 }
 
+function getMacIconPath(): string | undefined {
+  if (process.platform !== 'darwin') return undefined
+
+  const iconPath = app.isPackaged
+    ? join(process.resourcesPath, 'icon.icns')
+    : join(app.getAppPath(), 'build', 'icon.png')
+
+  return existsSync(iconPath) ? iconPath : undefined
+}
+
 function createWindow(): void {
   const windowsIconPath = getWindowsIconPath()
+  const macTrafficLights = process.platform === 'darwin'
+    ? { x: 16, y: 14 }
+    : undefined
 
   const mainWindow = new BrowserWindow({
     width: 1440,
@@ -531,6 +544,7 @@ function createWindow(): void {
       symbolColor: '#111827',
       height: 40
     },
+    trafficLightPosition: macTrafficLights,
     icon: windowsIconPath,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -558,6 +572,11 @@ function createWindow(): void {
 // ─── App Lifecycle ──────────────────────────────────────────────────────────
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.tcbudget')
+
+  const macIconPath = getMacIconPath()
+  if (macIconPath && process.platform === 'darwin') {
+    app.dock?.setIcon(macIconPath)
+  }
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

@@ -12,6 +12,10 @@ interface HeaderProps {
 export default function Header({ onAddCard, onRefreshPrices, onExportCsv, onExportDb, onImportDb, isRefreshing }: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent)
+  const headerClassName = isMac
+    ? 'titlebar-drag flex items-center justify-between pl-[88px] pr-5 py-2 min-h-[56px] border-b border-surface-200'
+    : 'titlebar-drag flex items-center justify-between pl-5 pr-36 py-3 border-b border-surface-200'
 
   useEffect(() => {
     if (!isMenuOpen) return
@@ -37,7 +41,9 @@ export default function Header({ onAddCard, onRefreshPrices, onExportCsv, onExpo
   }
 
   return (
-    <header className="titlebar-drag flex items-center justify-between pl-5 pr-36 py-3 border-b border-surface-200">
+    <header
+      className={headerClassName}
+    >
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2.5 titlebar-no-drag">
           <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
