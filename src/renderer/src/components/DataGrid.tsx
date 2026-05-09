@@ -626,7 +626,6 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       width: 220,
       minWidth: 160,
       filter: false,
-      pinned: 'left' as const,
       tooltipValueGetter: (params) => params.data?.name ?? ''
     },
     {
@@ -835,7 +834,6 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
         onViewContents: onViewContents,
         onEditPulledFrom: onEditPulledFrom
       },
-      pinned: 'right' as const,
       sortable: false,
       filter: false
     }
