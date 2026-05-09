@@ -556,6 +556,25 @@ function createWindow(): void {
     mainWindow.show()
   })
 
+  // Safety net: if ready-to-show never fires (renderer crash), force-show after 5s
+  // so the user at least sees an error instead of an invisible app.
+  const showTimeout = setTimeout(() => {
+    if (!mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      console.warn('[Main] ready-to-show did not fire within 5 s — force-showing window')
+      mainWindow.show()
+    }
+  }, 5000)
+
+  mainWindow.on('ready-to-show', () => clearTimeout(showTimeout))
+
+  // Log renderer-side crashes so we can debug invisible-window issues.
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    console.error('[Main] Renderer process gone:', details.reason, details.exitCode)
+  })
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc) => {
+    console.error('[Main] Failed to load renderer:', code, desc)
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
@@ -593,8 +612,16 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (db) db.close()
   if (process.platform !== 'darwin') {
     app.quit()
+  }
+})
+
+// Close the database only when the app is actually quitting,
+// NOT on window-all-closed — on macOS the app stays alive in the dock
+// and reopening it would hit a closed DB, causing a silent crash.
+app.on('before-quit', () => {
+  if (db) {
+    try { db.close() } catch { /* already closed */ }
   }
 })

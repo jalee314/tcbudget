@@ -46,6 +46,10 @@
       "node_modules/**/*",
       "package.json"
     ],
+    "asarUnpack": [
+      "**/*.node",
+      "**/better-sqlite3/**"
+    ],
     "directories": { "buildResources": "build" },
     "mac": {
       "target": ["dmg", "zip"],
