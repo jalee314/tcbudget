@@ -66,15 +66,22 @@ export default function Sidebar({
 }: SidebarProps) {
   const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent)
 
+  // macOS traffic-light cluster sits at x=16 and is ~70px wide (see
+  // trafficLightPosition in src/main/index.ts). When collapsed, the sidebar
+  // needs to be wide enough to fully contain the cluster so the controls
+  // don't spill past the sidebar's right edge into the header.
+  const collapsedWidth = isMac ? 'w-[92px]' : 'w-16'
+
   return (
     <aside
       className={`relative flex flex-col bg-sidebar-bg border-r border-sidebar-border transition-[width] duration-200 ease-out ${
-        collapsed ? 'w-16' : 'w-[232px]'
+        collapsed ? collapsedWidth : 'w-[232px]'
       }`}
     >
       {/* macOS: leave clearance for the traffic-light controls and make the
-          area above the logo a drag region so users can move the window. */}
-      {isMac && <div className="titlebar-drag h-9 w-full flex-shrink-0" />}
+          area above the logo a drag region so users can move the window.
+          h-10 keeps the logo well below the controls (y=14, ~12px tall). */}
+      {isMac && <div className="titlebar-drag h-10 w-full flex-shrink-0" />}
 
       {/* Logo + collapse toggle. Fixed h-16 so the row height doesn't depend
           on whether the wordmark is visible — otherwise the logo (and
