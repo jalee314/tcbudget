@@ -112,7 +112,7 @@ function initDatabase(): void {
 function setupIPC(): void {
   // Get all inventory items
   ipcMain.handle('db:getAll', () => {
-    const stmt = db.prepare('SELECT * FROM inventory ORDER BY rowid DESC')
+    const stmt = db.prepare('SELECT * FROM inventory ORDER BY rowid ASC')
     return stmt.all()
   })
 

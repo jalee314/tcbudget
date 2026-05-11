@@ -116,7 +116,7 @@ function StatCard({ label, value, subValue, icon, variant = 'default', headerExt
         <span className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">{label}</span>
         <div className="flex items-center gap-1.5">
           {headerExtra}
-          <div className={`p-1.5 rounded-lg ${iconBg} transition-transform duration-300 group-hover:scale-110`}>
+          <div className={`p-1.5 rounded-lg ${iconBg}`}>
             {icon}
           </div>
         </div>

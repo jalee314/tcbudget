@@ -21,6 +21,14 @@ export default function Header({ onAddCard, onRefreshPrices, onExportCsv, onExpo
   useEffect(() => {
     if (isDark) document.documentElement.setAttribute('data-theme', 'dark')
     else document.documentElement.removeAttribute('data-theme')
+    // Re-theme the Windows native title bar overlay (close / min / max
+    // controls) so they don't stay on a light background in dark mode.
+    // No-op on macOS and inside the IPC handler.
+    window.electronAPI?.window?.setTitleBarOverlay(
+      isDark
+        ? { color: '#000000', symbolColor: '#E5E7EB' }
+        : { color: '#F3F4F6', symbolColor: '#111827' }
+    )
   }, [isDark])
 
   const toggleDark = () => {

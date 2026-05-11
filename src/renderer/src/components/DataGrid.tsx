@@ -57,6 +57,14 @@ interface DataGridProps {
 
 // ─── Custom Cell Renderers ──────────────────────────────────────────────
 
+// TCGplayer-sourced card names usually end with " - 199/197" or " - 199".
+// Strip that suffix for cards so the row shows the actual card name only;
+// the dedicated card-number column is the source of truth for that data.
+function displayCardName(name: string, itemType?: string): string {
+  if (itemType !== 'Card') return name
+  return name.replace(/\s+[-–—]\s+\d+(\s*\/\s*\d+)?\s*$/, '').trim()
+}
+
 function CardNameRenderer(props: ICellRendererParams<GridRow> & { onToggleGroup?: (key: string) => void }) {
   const data = props.data
   if (!data) return null
@@ -92,12 +100,12 @@ function CardNameRenderer(props: ICellRendererParams<GridRow> & { onToggleGroup?
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold text-surface-900 truncate flex items-center gap-2">
-            {data.name}
+            {displayCardName(data.name, data.item_type)}
             <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-accent/15 text-accent-dark">
               {data.__lotCount} lots
             </span>
           </div>
-          <div className="text-[11px] text-surface-500 truncate">{data.set_name} · {data.card_number}</div>
+          <div className="text-[11px] text-surface-500 truncate">{data.set_name}</div>
         </div>
       </button>
     )
@@ -117,9 +125,9 @@ function CardNameRenderer(props: ICellRendererParams<GridRow> & { onToggleGroup?
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-surface-900 truncate">
           {data.__inGroup ? <span className="text-surface-500 text-xs">Lot · </span> : null}
-          {data.name}
+          {displayCardName(data.name, data.item_type)}
         </div>
-        <div className="text-[11px] text-surface-500 truncate">{data.set_name} · {data.card_number}</div>
+        <div className="text-[11px] text-surface-500 truncate">{data.set_name}</div>
       </div>
     </div>
   )
@@ -149,10 +157,14 @@ function ConditionRenderer(props: ICellRendererParams<GridRow>) {
 function MarketValueRenderer(props: ICellRendererParams<GridRow>) {
   const data = props.data
   if (!data) return null
+  const total = data.market_price * data.quantity
   return (
-    <span className="text-surface-900 font-medium text-sm tabular-nums">
-      {formatCurrency(data.market_price * data.quantity)}
-    </span>
+    <div className="flex items-baseline gap-1.5 tabular-nums">
+      <span className="text-surface-900 font-medium text-sm">{formatCurrency(total)}</span>
+      {data.quantity > 1 && (
+        <span className="text-surface-500 text-xs">({formatCurrency(data.market_price)})</span>
+      )}
+    </div>
   )
 }
 

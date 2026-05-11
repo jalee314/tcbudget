@@ -22,9 +22,11 @@ function applySavedOrder(rows: InventoryCard[]): InventoryCard[] {
   try {
     const savedIds: string[] = JSON.parse(raw)
     const idToIndex = new Map(savedIds.map((id, i) => [id, i]))
+    // Items not in the saved order are newly added since the last reorder —
+    // append them after the saved tail so they appear at the bottom.
     return [...rows].sort((a, b) => {
-      const ia = idToIndex.has(a.id) ? idToIndex.get(a.id)! : -1
-      const ib = idToIndex.has(b.id) ? idToIndex.get(b.id)! : -1
+      const ia = idToIndex.has(a.id) ? idToIndex.get(a.id)! : Number.MAX_SAFE_INTEGER
+      const ib = idToIndex.has(b.id) ? idToIndex.get(b.id)! : Number.MAX_SAFE_INTEGER
       return ia - ib
     })
   } catch {
@@ -240,7 +242,7 @@ export default function App() {
       if (window.electronAPI) {
         await window.electronAPI.db.insert(newCard as unknown as Record<string, unknown>)
       }
-      setInventory(prev => [newCard, ...prev])
+      setInventory(prev => [...prev, newCard])
     } catch (err) {
       console.error('Failed to add card:', err)
     }
@@ -340,7 +342,7 @@ export default function App() {
       }
       setInventory(prev => {
         const updated = prev.map(c => c.id === card.id ? { ...c, quantity: remainingQty } : c)
-        return [openedRow, ...updated]
+        return [...updated, openedRow]
       })
     }
     setOpeningCard(null)
@@ -408,7 +410,7 @@ export default function App() {
       }
       setInventory(prev => {
         const updated = prev.map(c => c.id === card.id ? { ...c, quantity: remainingQty } : c)
-        return [soldRow, ...updated]
+        return [...updated, soldRow]
       })
     }
     setSellingCard(null)
