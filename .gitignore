@@ -2,3 +2,5 @@ node_modules/
 dist/
 out/
 .env
+STYLE_GUIDE.md
+.DS_Store
