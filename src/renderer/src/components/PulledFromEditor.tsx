@@ -36,7 +36,7 @@ export default function PulledFromEditor({ card, openedSealedItems, onClose, onS
       className="fixed inset-0 z-50 modal-backdrop flex items-center justify-center p-4 animate-fade-in"
       onClick={handleBackdrop}
     >
-      <div className="glass-card w-full max-w-md flex flex-col animate-scale-in" onClick={e => e.stopPropagation()}>
+      <div className="glass-card w-full max-w-md flex flex-col shadow-xl-soft animate-scale-in" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-surface-200">
           <div>
             <h2 className="text-sm font-bold text-surface-900">Pulled From</h2>

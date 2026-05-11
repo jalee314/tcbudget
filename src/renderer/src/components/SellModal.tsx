@@ -49,11 +49,11 @@ export default function SellModal({ card, onClose, onConfirm }: SellModalProps) 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 modal-backdrop flex items-center justify-center animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="glass-card w-full max-w-md mx-4 p-6 rounded-2xl shadow-2xl"
+        className="glass-card w-full max-w-md mx-4 p-6 rounded-2xl shadow-xl-soft animate-scale-in"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
@@ -137,16 +137,10 @@ export default function SellModal({ card, onClose, onConfirm }: SellModalProps) 
         </div>
 
         <div className="flex gap-2 mt-6 justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold text-surface-700 hover:bg-surface-100 rounded-lg transition-colors"
-          >
+          <button onClick={onClose} className="btn-ghost text-sm">
             Cancel
           </button>
-          <button
-            onClick={handleConfirm}
-            className="px-4 py-2 text-sm font-semibold text-black bg-accent hover:bg-accent-dark rounded-lg transition-colors"
-          >
+          <button onClick={handleConfirm} className="btn-primary text-sm">
             Confirm Sale
           </button>
         </div>

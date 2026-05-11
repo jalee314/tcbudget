@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { PortfolioSummary } from '../types'
+import { InventoryCard, PortfolioSummary } from '../types'
+import PortfolioBreakdown from './PortfolioBreakdown'
 
 interface SummaryCardsProps {
+  inventory: InventoryCard[]
   summary: PortfolioSummary
   liquidationPct: number
   onLiquidationPctChange: (value: number) => void
@@ -100,7 +102,7 @@ function StatCard({ label, value, subValue, icon, variant = 'default', headerExt
     default: 'bg-surface-100 text-surface-500',
     gain: 'bg-gain/10 text-gain',
     loss: 'bg-loss/10 text-loss',
-    accent: 'bg-accent text-surface-900'
+    accent: 'bg-accent/10 text-accent-dark'
   }[variant]
 
   const valueColor = {
@@ -110,26 +112,75 @@ function StatCard({ label, value, subValue, icon, variant = 'default', headerExt
     accent: 'text-surface-900'
   }[variant]
 
+  // flex-col + h-full + mt-auto pushes the value/subvalue block to the
+  // bottom of the card. Combined with the grid's default align-stretch,
+  // every card's value bottom-aligns at the same y position.
   return (
-    <div className={`glass-card-subtle p-4 ${borderColor} transition-all duration-300 hover:border-opacity-50 group`}>
+    <div className={`glass-card-subtle p-5 ${borderColor} flex flex-col h-full transition-all duration-300 hover:border-opacity-50 group`}>
       <div className="flex items-start justify-between mb-3">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">{label}</span>
         <div className="flex items-center gap-1.5">
           {headerExtra}
-          <div className={`p-1.5 rounded-lg ${iconBg}`}>
+          <div className={`p-2 rounded-lg ${iconBg}`}>
             {icon}
           </div>
         </div>
       </div>
-      <div className={`text-xl font-semibold ${valueColor} tabular-nums`}>{value}</div>
-      {subValue && (
-        <div className="text-[11px] text-surface-500 mt-1">{subValue}</div>
-      )}
+      <div className="mt-auto">
+        <div className={`text-2xl font-bold ${valueColor} tabular-nums leading-tight`}>{value}</div>
+        {subValue && (
+          <div className="text-[11px] text-surface-500 mt-1.5">{subValue}</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Hero stat — the headline KPI (Market Value). Bigger typography, brand
+// tinted background, more elevation. Optional `chart` slot renders to the
+// right of the value (used for the portfolio breakdown donut). See
+// STYLE_GUIDE.md §7.3.
+interface HeroStatProps {
+  label: string
+  value: string
+  subValue?: string
+  icon: React.ReactNode
+  chart?: React.ReactNode
+}
+
+function HeroStat({ label, value, subValue, icon, chart }: HeroStatProps) {
+  // Same vertical rhythm as StatCard — label at top, value+subvalue
+  // mt-auto'd to the bottom. The chart shares the bottom row with the
+  // value (items-end) so its baseline lines up with the value's. It
+  // sits in the middle of the remaining horizontal space via
+  // flex-1 + justify-center.
+  return (
+    <div className="glass-card-hero p-5 flex flex-col h-full transition-all duration-300 group">
+      <div className="relative flex items-start justify-between mb-3">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">{label}</span>
+        <div className="p-2 rounded-lg bg-surface-100 text-surface-500">
+          {icon}
+        </div>
+      </div>
+      <div className="relative mt-auto flex items-end gap-4">
+        <div className="flex-shrink-0">
+          <div className="text-2xl font-bold text-accent-dark tabular-nums leading-tight">
+            {value}
+          </div>
+          {subValue && (
+            <div className="text-[11px] text-surface-500 mt-1.5">{subValue}</div>
+          )}
+        </div>
+        {chart && (
+          <div className="flex-1 flex justify-center">{chart}</div>
+        )}
+      </div>
     </div>
   )
 }
 
 export default function SummaryCards({
+  inventory,
   summary,
   liquidationPct,
   onLiquidationPctChange,
@@ -139,25 +190,27 @@ export default function SummaryCards({
   const realizedVariant = summary.realizedGains >= 0 ? 'gain' : 'loss'
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 px-5 py-4 animate-fade-in">
-      <StatCard
-        label="Market Value"
-        value={formatCurrency(summary.totalMarketValue)}
-        subValue={`${summary.totalQuantity} items across ${summary.totalCards} positions`}
-        variant="accent"
-        icon={
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-          </svg>
-        }
-      />
+    <div className="grid grid-cols-2 md:grid-cols-6 gap-3 px-6 py-4 animate-fade-in">
+      <div className="col-span-2">
+        <HeroStat
+          label="Market Value"
+          value={formatCurrency(summary.totalMarketValue)}
+          subValue={`${summary.totalQuantity} items across ${summary.totalCards} positions`}
+          icon={
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+          }
+          chart={<PortfolioBreakdown inventory={inventory} />}
+        />
+      </div>
       <StatCard
         label="Cost Basis"
         value={formatCurrency(summary.totalCostBasis)}
         subValue={`${summary.heldCount} held · ${summary.openedCount} opened · ${summary.soldCount} sold`}
         variant="default"
         icon={
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>
           </svg>
         }
@@ -175,7 +228,7 @@ export default function SummaryCards({
         variant={plVariant}
         headerExtra={<LiquidationPctEditor value={liquidationPct} onChange={onLiquidationPctChange} />}
         icon={
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points={summary.unrealizedPL >= 0 ? "22 7 13.5 15.5 8.5 10.5 2 17" : "22 17 13.5 8.5 8.5 13.5 2 7"}/>
             <polyline points={summary.unrealizedPL >= 0 ? "16 7 22 7 22 13" : "16 17 22 17 22 11"}/>
           </svg>
@@ -199,7 +252,7 @@ export default function SummaryCards({
               : 'loss'
         }
         icon={
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>
           </svg>
         }
@@ -210,7 +263,7 @@ export default function SummaryCards({
         subValue={`${summary.soldCount} completed ${summary.soldCount === 1 ? 'trade' : 'trades'}`}
         variant={realizedVariant}
         icon={
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 6 9 17l-5-5"/>
           </svg>
         }

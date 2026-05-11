@@ -139,7 +139,7 @@ export default function Header({ onAddCard, onRefreshPrices, onExportCsv, onExpo
             </svg>
           </button>
           {isMenuOpen && (
-            <div role="menu" className="absolute right-0 mt-1.5 w-56 bg-white border border-surface-200 rounded-lg shadow-lg overflow-hidden z-20 animate-fade-in">
+            <div role="menu" className="absolute right-0 mt-1.5 w-56 bg-white border border-surface-200 rounded-lg shadow-lg-soft overflow-hidden z-20 animate-fade-in">
               <button
                 role="menuitem"
                 onClick={choose(onExportDb)}

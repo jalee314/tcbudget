@@ -43,6 +43,7 @@ type GridRow = InventoryCard & {
 
 interface DataGridProps {
   rowData: InventoryCard[]
+  viewFilter: 'all' | 'cards' | 'sealed' | 'sold'
   onCellValueChanged: (id: string, field: string, value: unknown) => void
   onDeleteRow: (id: string) => void
   onToggleSold: (card: InventoryCard) => void
@@ -443,11 +444,10 @@ function formatCurrency(val: number): string {
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
-export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onToggleSold, onToggleOpened, onToggleKeep, includeHeldInPL, onToggleIncludeHeldInPL, onViewContents, onEditPulledFrom, onReorder }: DataGridProps) {
+export default function DataGrid({ rowData, viewFilter, onCellValueChanged, onDeleteRow, onToggleSold, onToggleOpened, onToggleKeep, includeHeldInPL, onToggleIncludeHeldInPL, onViewContents, onEditPulledFrom, onReorder }: DataGridProps) {
   const gridRef = useRef<AgGridReact>(null)
   const gridWrapperRef = useRef<HTMLDivElement>(null)
   const [filterText, setFilterText] = useState('')
-  const [viewFilter, setViewFilter] = useState<'all' | 'cards' | 'sealed'>('all')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => new Set(DEFAULT_HIDDEN))
   const [showColumnMenu, setShowColumnMenu] = useState(false)
@@ -525,6 +525,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
   const filteredByType = useMemo(() => {
     if (viewFilter === 'cards') return rowData.filter(c => c.item_type === 'Card')
     if (viewFilter === 'sealed') return rowData.filter(c => c.item_type === 'Sealed')
+    if (viewFilter === 'sold') return rowData.filter(c => c.is_sold === 1)
     return rowData
   }, [rowData, viewFilter])
 
@@ -894,23 +895,9 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
 
   return (
     <div className="flex flex-col h-full">
-      {/* Grid Filter Bar */}
-      <div className="flex items-center gap-3 px-5 py-3">
-        <div className="flex gap-1 border border-surface-200 rounded-lg p-0.5 bg-surface-50">
-          {(['all', 'cards', 'sealed'] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setViewFilter(tab)}
-              className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
-                viewFilter === tab
-                  ? 'bg-white text-surface-900 shadow-sm'
-                  : 'text-surface-500 hover:text-surface-700'
-              }`}
-            >
-              {tab === 'all' ? 'All' : tab === 'cards' ? 'Cards' : 'Sealed'}
-            </button>
-          ))}
-        </div>
+      {/* Grid Filter Bar — view filtering moved to the sidebar; this bar is
+          now just search + density controls. */}
+      <div className="flex items-center gap-3 px-6 py-3">
         <div className="relative flex-1 max-w-sm">
           <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-500" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
@@ -961,7 +948,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
           </button>
 
           {showColumnMenu && (
-            <div className="absolute right-0 top-full mt-1 z-20 w-56 max-h-80 overflow-y-auto bg-white border border-surface-200 rounded-lg shadow-lg py-1">
+            <div className="absolute right-0 top-full mt-1 z-20 w-56 max-h-80 overflow-y-auto bg-white border border-surface-200 rounded-lg shadow-lg-soft py-1">
               <div className="flex items-center justify-between px-3 py-1.5 border-b border-surface-100">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">Show Columns</span>
                 <button

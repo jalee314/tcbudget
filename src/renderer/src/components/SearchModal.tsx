@@ -568,7 +568,7 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
       onClick={handleBackdropClick}
     >
       <div
-        className="glass-card w-full max-w-2xl h-[85vh] flex flex-col animate-scale-in"
+        className="glass-card w-full max-w-2xl h-[85vh] flex flex-col shadow-xl-soft animate-scale-in"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
