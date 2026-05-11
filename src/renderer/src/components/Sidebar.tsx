@@ -1,25 +1,23 @@
 import React from 'react'
 
-export type ViewFilter = 'all' | 'cards' | 'sealed' | 'sold'
+export type Page = 'portfolio' | 'settings'
 
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
-  viewFilter: ViewFilter
-  onViewFilterChange: (v: ViewFilter) => void
-  counts: Record<ViewFilter, number>
+  currentPage: Page
+  onPageChange: (p: Page) => void
 }
 
 interface NavItemProps {
   collapsed: boolean
   active: boolean
   label: string
-  count?: number
   icon: React.ReactNode
   onClick: () => void
 }
 
-function NavItem({ collapsed, active, label, count, icon, onClick }: NavItemProps) {
+function NavItem({ collapsed, active, label, icon, onClick }: NavItemProps) {
   const base =
     'group relative w-full flex items-center rounded-lg transition-colors duration-150 ' +
     (collapsed ? 'justify-center px-0 h-10' : 'gap-3 px-3 h-10')
@@ -38,20 +36,7 @@ function NavItem({ collapsed, active, label, count, icon, onClick }: NavItemProp
       )}
       <span className={`flex-shrink-0 ${active ? 'text-brand-700' : ''}`}>{icon}</span>
       {!collapsed && (
-        <>
-          <span className="flex-1 min-w-0 text-left text-sm font-medium truncate">{label}</span>
-          {count != null && count > 0 && (
-            <span
-              className={`text-[10px] font-bold px-1.5 py-0.5 rounded tabular-nums ${
-                active
-                  ? 'bg-brand-200 text-brand-800'
-                  : 'bg-surface-100 text-surface-600 group-hover:bg-surface-200'
-              }`}
-            >
-              {count}
-            </span>
-          )}
-        </>
+        <span className="flex-1 min-w-0 text-left text-sm font-medium truncate">{label}</span>
       )}
     </button>
   )
@@ -65,25 +50,6 @@ const Icons = {
       <path d="M21 12A9 9 0 0 0 12 3v9z" />
     </svg>
   ),
-  card: (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="M3 10h18" />
-    </svg>
-  ),
-  sealed: (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-      <polyline points="3.29 7 12 12 20.71 7" />
-      <line x1="12" y1="22" x2="12" y2="12" />
-    </svg>
-  ),
-  sold: (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-      <polyline points="16 7 22 7 22 13" />
-    </svg>
-  ),
   settings: (
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
@@ -95,9 +61,8 @@ const Icons = {
 export default function Sidebar({
   collapsed,
   onToggle,
-  viewFilter,
-  onViewFilterChange,
-  counts
+  currentPage,
+  onPageChange
 }: SidebarProps) {
   const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent)
 
@@ -111,13 +76,13 @@ export default function Sidebar({
           area above the logo a drag region so users can move the window. */}
       {isMac && <div className="titlebar-drag h-9 w-full flex-shrink-0" />}
 
-      {/* Logo + collapse toggle. Clicking anywhere in this header toggles
-          the sidebar. The chevron is a visual affordance, not a separate
-          control — keeps the hit target generous. */}
+      {/* Logo + collapse toggle. Fixed h-16 so the row height doesn't depend
+          on whether the wordmark is visible — otherwise the logo (and
+          everything below it) shifts a few pixels when toggling. */}
       <button
         onClick={onToggle}
-        className={`titlebar-no-drag flex items-center w-full ${
-          collapsed ? 'justify-center px-0 py-4' : 'gap-2.5 px-4 py-4'
+        className={`titlebar-no-drag flex items-center w-full h-16 flex-shrink-0 ${
+          collapsed ? 'justify-center px-0' : 'gap-2.5 px-4'
         } hover:bg-sidebar-item-hover transition-colors`}
         title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -168,43 +133,23 @@ export default function Sidebar({
       <div className="h-px bg-sidebar-border mx-3" />
 
       <nav className="flex-1 px-2 py-3 overflow-y-auto overflow-x-hidden">
-        {!collapsed && (
-          <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-sidebar-section-label">
-            Inventory
-          </div>
-        )}
+        {/* Section label space is always reserved — collapsing just fades the
+            text so nav items don't jump up/down by 28px on toggle. */}
+        <div
+          className={`px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-sidebar-section-label transition-opacity duration-150 ${
+            collapsed ? 'opacity-0' : 'opacity-100'
+          }`}
+          aria-hidden={collapsed}
+        >
+          Pages
+        </div>
         <div className="flex flex-col gap-0.5">
           <NavItem
             collapsed={collapsed}
-            active={viewFilter === 'all'}
+            active={currentPage === 'portfolio'}
             label="Portfolio"
-            count={counts.all}
             icon={Icons.portfolio}
-            onClick={() => onViewFilterChange('all')}
-          />
-          <NavItem
-            collapsed={collapsed}
-            active={viewFilter === 'cards'}
-            label="Singles"
-            count={counts.cards}
-            icon={Icons.card}
-            onClick={() => onViewFilterChange('cards')}
-          />
-          <NavItem
-            collapsed={collapsed}
-            active={viewFilter === 'sealed'}
-            label="Sealed"
-            count={counts.sealed}
-            icon={Icons.sealed}
-            onClick={() => onViewFilterChange('sealed')}
-          />
-          <NavItem
-            collapsed={collapsed}
-            active={viewFilter === 'sold'}
-            label="Sold"
-            count={counts.sold}
-            icon={Icons.sold}
-            onClick={() => onViewFilterChange('sold')}
+            onClick={() => onPageChange('portfolio')}
           />
         </div>
       </nav>
@@ -214,10 +159,10 @@ export default function Sidebar({
       <div className="px-2 py-3">
         <NavItem
           collapsed={collapsed}
-          active={false}
+          active={currentPage === 'settings'}
           label="Settings"
           icon={Icons.settings}
-          onClick={() => { /* placeholder — settings view not built yet */ }}
+          onClick={() => onPageChange('settings')}
         />
       </div>
     </aside>

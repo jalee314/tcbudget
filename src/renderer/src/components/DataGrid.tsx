@@ -43,7 +43,6 @@ type GridRow = InventoryCard & {
 
 interface DataGridProps {
   rowData: InventoryCard[]
-  viewFilter: 'all' | 'cards' | 'sealed' | 'sold'
   onCellValueChanged: (id: string, field: string, value: unknown) => void
   onDeleteRow: (id: string) => void
   onToggleSold: (card: InventoryCard) => void
@@ -444,10 +443,11 @@ function formatCurrency(val: number): string {
 
 // ─── Main Component ─────────────────────────────────────────────────────
 
-export default function DataGrid({ rowData, viewFilter, onCellValueChanged, onDeleteRow, onToggleSold, onToggleOpened, onToggleKeep, includeHeldInPL, onToggleIncludeHeldInPL, onViewContents, onEditPulledFrom, onReorder }: DataGridProps) {
+export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onToggleSold, onToggleOpened, onToggleKeep, includeHeldInPL, onToggleIncludeHeldInPL, onViewContents, onEditPulledFrom, onReorder }: DataGridProps) {
   const gridRef = useRef<AgGridReact>(null)
   const gridWrapperRef = useRef<HTMLDivElement>(null)
   const [filterText, setFilterText] = useState('')
+  const [viewFilter, setViewFilter] = useState<'all' | 'cards' | 'sealed'>('all')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => new Set(DEFAULT_HIDDEN))
   const [showColumnMenu, setShowColumnMenu] = useState(false)
@@ -525,7 +525,6 @@ export default function DataGrid({ rowData, viewFilter, onCellValueChanged, onDe
   const filteredByType = useMemo(() => {
     if (viewFilter === 'cards') return rowData.filter(c => c.item_type === 'Card')
     if (viewFilter === 'sealed') return rowData.filter(c => c.item_type === 'Sealed')
-    if (viewFilter === 'sold') return rowData.filter(c => c.is_sold === 1)
     return rowData
   }, [rowData, viewFilter])
 
@@ -623,6 +622,79 @@ export default function DataGrid({ rowData, viewFilter, onCellValueChanged, onDe
     })
     onReorder(orderedIds)
   }, [onReorder])
+
+  // ─── Custom drag ghost ─────────────────────────────────────────────
+  // AG Grid's default drag ghost only shows the cell whose column has
+  // rowDrag: true (the name column here). To show the entire row visually
+  // while keeping drag initiation locked to the handle, we hide the
+  // default ghost (in index.css) and clone the source row's DOM into a
+  // fixed-position element that tracks the cursor.
+  const dragCloneRef = useRef<HTMLElement | null>(null)
+
+  const startCustomGhost = useCallback((rowId: string) => {
+    if (dragCloneRef.current) return
+    const sourceRow = document.querySelector<HTMLElement>(`.ag-row[row-id="${rowId}"]`)
+    if (!sourceRow) return
+    const rect = sourceRow.getBoundingClientRect()
+
+    // Wrap the clone in a theme container — the `.ag-theme-custom-light
+    // .ag-cell { display: flex; align-items: center; padding: ... }` rules
+    // require that ancestor for cells to size and align correctly.
+    // Without the wrapper, the clone collapses: text hugs the top of each
+    // cell, separators disappear, and horizontal padding vanishes.
+    const wrapper = document.createElement('div')
+    wrapper.className = 'ag-theme-custom-light row-drag-ghost'
+    wrapper.style.position = 'fixed'
+    wrapper.style.left = '0'
+    wrapper.style.top = '0'
+    wrapper.style.width = `${rect.width}px`
+    wrapper.style.height = `${rect.height}px`
+    wrapper.style.transform = `translate(${rect.left}px, ${rect.top}px)`
+    wrapper.style.pointerEvents = 'none'
+    wrapper.style.zIndex = '9999'
+
+    const clone = sourceRow.cloneNode(true) as HTMLElement
+    // AG Grid positions rows via inline transform (translateY for vertical
+    // offset inside the viewport). That has to be cleared or the cloned
+    // row will float to its original table position inside the wrapper.
+    clone.style.position = 'relative'
+    clone.style.transform = 'none'
+    clone.style.top = '0'
+    clone.style.left = '0'
+    clone.style.width = '100%'
+    clone.style.height = '100%'
+
+    wrapper.appendChild(clone)
+    document.body.appendChild(wrapper)
+    dragCloneRef.current = wrapper
+  }, [])
+
+  const stopCustomGhost = useCallback(() => {
+    dragCloneRef.current?.remove()
+    dragCloneRef.current = null
+  }, [])
+
+  // Mouse position drives the clone's transform — runs once for the
+  // grid's lifetime; the listener cheaply no-ops when there's no active
+  // ghost, which keeps drag start latency low.
+  useEffect(() => {
+    const handleMove = (e: MouseEvent) => {
+      const el = dragCloneRef.current
+      if (!el) return
+      el.style.transform = `translate(${e.clientX - 40}px, ${e.clientY - 24}px)`
+    }
+    const handleUp = () => stopCustomGhost()
+    window.addEventListener('mousemove', handleMove)
+    window.addEventListener('mouseup', handleUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMove)
+      window.removeEventListener('mouseup', handleUp)
+    }
+  }, [stopCustomGhost])
+
+  const handleRowDragEnter = useCallback((event: { node: { data?: GridRow } }) => {
+    if (event.node?.data?.id) startCustomGhost(event.node.data.id)
+  }, [startCustomGhost])
 
   const priceChangeRenderer = useMemo(() => makePriceChangeRenderer(() => priceChangeModeRef.current), [])
   const totalGLRenderer = useMemo(() => makeTotalGLRenderer(() => totalGLModeRef.current), [])
@@ -895,9 +967,23 @@ export default function DataGrid({ rowData, viewFilter, onCellValueChanged, onDe
 
   return (
     <div className="flex flex-col h-full">
-      {/* Grid Filter Bar — view filtering moved to the sidebar; this bar is
-          now just search + density controls. */}
+      {/* Grid Filter Bar */}
       <div className="flex items-center gap-3 px-6 py-3">
+        <div className="flex gap-1 border border-surface-200 rounded-lg p-0.5 bg-surface-50">
+          {(['all', 'cards', 'sealed'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setViewFilter(tab)}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                viewFilter === tab
+                  ? 'bg-white text-surface-900 shadow-sm'
+                  : 'text-surface-500 hover:text-surface-700'
+              }`}
+            >
+              {tab === 'all' ? 'All' : tab === 'cards' ? 'Cards' : 'Sealed'}
+            </button>
+          ))}
+        </div>
         <div className="relative flex-1 max-w-sm">
           <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-500" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
@@ -997,7 +1083,9 @@ export default function DataGrid({ rowData, viewFilter, onCellValueChanged, onDe
             onCellValueChanged={handleCellValueChanged}
             onGridReady={handleGridReady}
             onGridSizeChanged={handleGridSizeChanged}
-            onRowDragEnd={handleRowDragEnd}
+            onRowDragEnd={(e) => { stopCustomGhost(); handleRowDragEnd(e) }}
+            onRowDragEnter={handleRowDragEnter}
+            onRowDragLeave={stopCustomGhost}
             rowDragManaged={true}
             pagination={false}
             getRowId={(params) => params.data.id}

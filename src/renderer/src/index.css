@@ -151,6 +151,29 @@ body {
   height: 100%;
 }
 
+/* Hide AG Grid's default drag ghost — DataGrid.tsx replaces it with a clone
+   of the entire source row so the user sees the full row following the
+   cursor instead of just the name cell. */
+.ag-dnd-ghost {
+  display: none !important;
+}
+
+/* The clone we append to <body>. AG Grid row CSS variables don't cascade
+   outside the grid, so we paint a clean white card with a soft elevation. */
+.row-drag-ghost {
+  background: #FFFFFF;
+  border: 1px solid #EAEBE6;
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(17, 24, 39, 0.18), 0 4px 12px rgba(17, 24, 39, 0.10);
+  opacity: 0.95;
+  overflow: hidden;
+}
+[data-theme="dark"] .row-drag-ghost {
+  background: #0E0E0E;
+  border-color: #1F1F1F;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
 .ag-theme-custom-light .ag-cell-inline-editing {
   background: transparent !important;
   border: none !important;
@@ -1192,10 +1215,17 @@ button:hover > .pulled-card-interactive.pulled-card-rare {
 }
 
 [data-theme="dark"] .glass-card,
-[data-theme="dark"] .glass-card-subtle {
+[data-theme="dark"] .glass-card-subtle,
+[data-theme="dark"] .glass-card-hero {
   background: #0E0E0E;
   border-color: #1F1F1F;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Hero card's brand-tinted radial wash — bumped a touch more visible on
+   dark so the warmth still reads against #0E0E0E. */
+[data-theme="dark"] .glass-card-hero::before {
+  background: radial-gradient(ellipse at top right, rgba(55, 184, 108, 0.10) 0%, transparent 55%);
 }
 
 [data-theme="dark"] header.titlebar-drag {
@@ -1275,3 +1305,28 @@ button:hover > .pulled-card-interactive.pulled-card-rare {
 [data-theme="dark"] .hover\:bg-surface-50:hover { background-color: #1A1A1A !important; }
 [data-theme="dark"] .hover\:bg-surface-100:hover { background-color: #262626 !important; }
 [data-theme="dark"] .hover\:bg-white:hover { background-color: #1A1A1A !important; }
+
+/* ─── Sidebar dark mode ─────────────────────────────────────────────── */
+/* Per STYLE_GUIDE.md §2.5 — translucent brand active state on near-black
+   surface, with the chevron/labels using cool grays. */
+[data-theme="dark"] .bg-sidebar-bg { background-color: #0B0F12 !important; }
+[data-theme="dark"] .border-sidebar-border { border-color: #161B1F !important; }
+[data-theme="dark"] .bg-sidebar-border { background-color: #161B1F !important; }
+[data-theme="dark"] .text-sidebar-item { color: #9CA3AF !important; }
+[data-theme="dark"] .hover\:bg-sidebar-item-hover:hover { background-color: rgba(255, 255, 255, 0.04) !important; }
+[data-theme="dark"] .text-sidebar-section-label { color: #6B7280 !important; }
+
+/* Brand utility classes used by the sidebar's active state and badges.
+   Light mode uses the solid brand-100 tint; dark mode uses a translucent
+   overlay so the near-black surface still shows through. */
+[data-theme="dark"] .bg-brand-100 { background-color: rgba(55, 184, 108, 0.14) !important; }
+[data-theme="dark"] .bg-brand-200 { background-color: rgba(55, 184, 108, 0.22) !important; }
+[data-theme="dark"] .text-brand-700 { color: #5BC683 !important; }
+[data-theme="dark"] .text-brand-800 { color: #5BC683 !important; }
+
+/* Badge-held is the only badge using brand tokens — keep it consistent. */
+[data-theme="dark"] .badge-held {
+  background: rgba(55, 184, 108, 0.16);
+  color: #5BC683;
+  border-color: rgba(55, 184, 108, 0.32);
+}

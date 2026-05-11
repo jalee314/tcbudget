@@ -115,21 +115,25 @@ function StatCard({ label, value, subValue, icon, variant = 'default', headerExt
   // flex-col + h-full + mt-auto pushes the value/subvalue block to the
   // bottom of the card. Combined with the grid's default align-stretch,
   // every card's value bottom-aligns at the same y position.
+  //
+  // transition-colors (not transition-all) — `transition-all` would animate
+  // layout properties too, which combined with the sidebar's width
+  // transition causes cards to visibly resize and reflow on every frame.
   return (
-    <div className={`glass-card-subtle p-5 ${borderColor} flex flex-col h-full transition-all duration-300 hover:border-opacity-50 group`}>
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">{label}</span>
-        <div className="flex items-center gap-1.5">
+    <div className={`glass-card-subtle p-5 ${borderColor} flex flex-col h-full transition-colors duration-200 hover:border-opacity-50 group min-w-0`}>
+      <div className="flex items-start justify-between mb-3 gap-2 min-w-0">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-surface-500 truncate">{label}</span>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           {headerExtra}
           <div className={`p-2 rounded-lg ${iconBg}`}>
             {icon}
           </div>
         </div>
       </div>
-      <div className="mt-auto">
-        <div className={`text-2xl font-bold ${valueColor} tabular-nums leading-tight`}>{value}</div>
+      <div className="mt-auto min-w-0">
+        <div className={`text-2xl font-bold ${valueColor} tabular-nums leading-tight truncate`}>{value}</div>
         {subValue && (
-          <div className="text-[11px] text-surface-500 mt-1.5">{subValue}</div>
+          <div className="text-[11px] text-surface-500 mt-1.5 truncate">{subValue}</div>
         )}
       </div>
     </div>
@@ -154,25 +158,27 @@ function HeroStat({ label, value, subValue, icon, chart }: HeroStatProps) {
   // value (items-end) so its baseline lines up with the value's. It
   // sits in the middle of the remaining horizontal space via
   // flex-1 + justify-center.
+  //
+  // transition-colors (not transition-all) — see StatCard for context.
   return (
-    <div className="glass-card-hero p-5 flex flex-col h-full transition-all duration-300 group">
-      <div className="relative flex items-start justify-between mb-3">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">{label}</span>
-        <div className="p-2 rounded-lg bg-surface-100 text-surface-500">
+    <div className="glass-card-hero p-5 flex flex-col h-full transition-colors duration-200 group min-w-0">
+      <div className="relative flex items-start justify-between mb-3 gap-2 min-w-0">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-surface-500 truncate">{label}</span>
+        <div className="p-2 rounded-lg bg-surface-100 text-surface-500 flex-shrink-0">
           {icon}
         </div>
       </div>
-      <div className="relative mt-auto flex items-end gap-4">
-        <div className="flex-shrink-0">
-          <div className="text-2xl font-bold text-accent-dark tabular-nums leading-tight">
+      <div className="relative mt-auto flex items-end gap-4 min-w-0">
+        <div className="flex-shrink min-w-0">
+          <div className="text-2xl font-bold text-accent-dark tabular-nums leading-tight truncate">
             {value}
           </div>
           {subValue && (
-            <div className="text-[11px] text-surface-500 mt-1.5">{subValue}</div>
+            <div className="text-[11px] text-surface-500 mt-1.5 truncate">{subValue}</div>
           )}
         </div>
         {chart && (
-          <div className="flex-1 flex justify-center">{chart}</div>
+          <div className="flex-1 flex justify-center min-w-0">{chart}</div>
         )}
       </div>
     </div>
