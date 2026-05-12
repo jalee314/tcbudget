@@ -443,6 +443,31 @@ export default function App() {
   const handleRefreshPrices = useCallback(async () => {
     setIsRefreshing(true)
     try {
+      // Legacy sealed items were stored without a variant_id, so they were silently
+      // skipped on refresh and price_change stayed at $0 forever. Resolve their
+      // variant_id by searching once; subsequent refreshes skip this step.
+      const sealedMissingVariant = inventory.filter(
+        c => !c.is_sold && c.item_type === 'Sealed' && !c.variant_id && c.name
+      )
+      if (sealedMissingVariant.length > 0 && window.electronAPI) {
+        for (const item of sealedMissingVariant) {
+          try {
+            const res = await window.electronAPI.justtcg.searchSealed(item.name)
+            if (res.error) continue
+            const match = (res.data as any[]).find(raw => raw?.id === item.card_id) ?? (res.data as any[])[0]
+            if (!match) continue
+            const sealedVariant = (match.variants ?? []).find((v: any) => v?.condition === 'Sealed') ?? match.variants?.[0]
+            const variantId = sealedVariant?.id
+            if (variantId) {
+              await window.electronAPI.db.update(item.id, 'variant_id', variantId)
+              item.variant_id = variantId
+            }
+          } catch (err) {
+            console.error('Failed to backfill sealed variant_id:', err)
+          }
+        }
+      }
+
       const toRefresh = inventory.filter(c => !c.is_sold && c.variant_id)
       if (toRefresh.length === 0) return
 

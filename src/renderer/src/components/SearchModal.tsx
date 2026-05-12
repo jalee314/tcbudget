@@ -124,6 +124,7 @@ function mapSealedProduct(raw: any): SealedProduct {
     pack_count: raw.pack_count ?? raw.packs ?? 0,
     market_price: sealedVariant?.price ?? raw.price ?? 0,
     image_url: tcgplayerImageUrl(raw.tcgplayerId),
+    variant_id: sealedVariant?.id ?? null,
   }
 }
 
@@ -437,7 +438,7 @@ export default function SearchModal({ isOpen, onClose, onAddCard, sealedItems = 
         id: p.id, name: p.name, set_name: p.set_name, set_id: p.set_id,
         card_number: '', rarity: p.product_type, image_url: p.image_url, market_price: p.market_price
       }
-      onAddCard(sealedAsCard, price, parseInt(quantity) || 1, 'Sealed', 'Sealed', null, null, purchaseDate || undefined)
+      onAddCard(sealedAsCard, price, parseInt(quantity) || 1, 'Sealed', 'Sealed', null, p.variant_id ?? null, purchaseDate || undefined)
     }
     handleClose()
   }, [selectedItem, purchasePrice, quantity, condition, parentId, activeVariant, displayedMarketPrice, isGifted, purchaseDate, onAddCard, handleClose])
