@@ -39,9 +39,12 @@ export default function Header({ onAddCard, onRefreshPrices, onExportCsv, onExpo
     })
   }
   const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent)
+  // Mac: traffic-light clearance lives on the sidebar; the header just needs
+  // a little left padding so its right-aligned actions don't sit flush.
+  // Windows: keep the right padding to clear the system min/max/close.
   const headerClassName = isMac
-    ? 'titlebar-drag flex items-center justify-between pl-[88px] pr-5 py-2 min-h-[56px] border-b border-surface-200'
-    : 'titlebar-drag flex items-center justify-between pl-5 pr-36 py-3 border-b border-surface-200'
+    ? 'titlebar-drag flex items-center justify-end pl-5 pr-5 py-2 min-h-[56px] border-b border-surface-200'
+    : 'titlebar-drag flex items-center justify-end pl-5 pr-36 py-3 border-b border-surface-200'
 
   useEffect(() => {
     if (!isMenuOpen) return
@@ -67,24 +70,7 @@ export default function Header({ onAddCard, onRefreshPrices, onExportCsv, onExpo
   }
 
   return (
-    <header
-      className={headerClassName}
-    >
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2.5 titlebar-no-drag">
-          <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111827" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-sm font-bold text-surface-900 tracking-tight">
-              TC<span className="text-surface-600">Budget</span>
-            </h1>
-            <p className="text-[10px] text-surface-500 font-medium tracking-wide uppercase">P&amp;L Tracker</p>
-          </div>
-        </div>
-      </div>
+    <header className={headerClassName}>
       <div className="flex items-center gap-2 titlebar-no-drag">
         <button onClick={onRefreshPrices} disabled={isRefreshing}
           className="btn-ghost flex items-center gap-2 text-xs disabled:opacity-50" title="Refresh market prices">
@@ -139,7 +125,7 @@ export default function Header({ onAddCard, onRefreshPrices, onExportCsv, onExpo
             </svg>
           </button>
           {isMenuOpen && (
-            <div role="menu" className="absolute right-0 mt-1.5 w-56 bg-white border border-surface-200 rounded-lg shadow-lg overflow-hidden z-20 animate-fade-in">
+            <div role="menu" className="absolute right-0 mt-1.5 w-56 bg-white border border-surface-200 rounded-lg shadow-lg-soft overflow-hidden z-20 animate-fade-in">
               <button
                 role="menuitem"
                 onClick={choose(onExportDb)}

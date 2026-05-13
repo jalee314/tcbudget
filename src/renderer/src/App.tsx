@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import Header from './components/Header'
+import Sidebar, { type Page } from './components/Sidebar'
 import SummaryCards from './components/SummaryCards'
 import DataGrid from './components/DataGrid'
 import SearchModal from './components/SearchModal'
@@ -14,6 +15,8 @@ const LIQUIDATION_PCT_KEY = 'liquidation_pct_v1'
 const LAST_AUTO_REFRESH_KEY = 'last_auto_refresh_at'
 const ROW_ORDER_KEY = 'inventory_row_order_v1'
 const INCLUDE_HELD_IN_PL_KEY = 'include_held_in_pl_v1'
+const SIDEBAR_COLLAPSED_KEY = 'tcbudget_sidebar_collapsed_v1'
+const CURRENT_PAGE_KEY = 'tcbudget_current_page_v1'
 const AUTO_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000 // 12 hours
 
 function applySavedOrder(rows: InventoryCard[]): InventoryCard[] {
@@ -56,6 +59,26 @@ export default function App() {
     const raw = localStorage.getItem(INCLUDE_HELD_IN_PL_KEY)
     return raw == null ? true : raw === '1'
   })
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1' } catch { return false }
+  })
+  const [currentPage, setCurrentPage] = useState<Page>(() => {
+    const raw = localStorage.getItem(CURRENT_PAGE_KEY)
+    return raw === 'settings' ? 'settings' : 'portfolio'
+  })
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed(v => {
+      const next = !v
+      try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0') } catch { /* ignore */ }
+      return next
+    })
+  }, [])
+
+  const updateCurrentPage = useCallback((p: Page) => {
+    setCurrentPage(p)
+    try { localStorage.setItem(CURRENT_PAGE_KEY, p) } catch { /* ignore */ }
+  }, [])
 
   const updateLiquidationPct = useCallback((value: number) => {
     const clamped = Math.max(1, Math.min(100, Math.round(value)))
@@ -420,6 +443,31 @@ export default function App() {
   const handleRefreshPrices = useCallback(async () => {
     setIsRefreshing(true)
     try {
+      // Legacy sealed items were stored without a variant_id, so they were silently
+      // skipped on refresh and price_change stayed at $0 forever. Resolve their
+      // variant_id by searching once; subsequent refreshes skip this step.
+      const sealedMissingVariant = inventory.filter(
+        c => !c.is_sold && c.item_type === 'Sealed' && !c.variant_id && c.name
+      )
+      if (sealedMissingVariant.length > 0 && window.electronAPI) {
+        for (const item of sealedMissingVariant) {
+          try {
+            const res = await window.electronAPI.justtcg.searchSealed(item.name)
+            if (res.error) continue
+            const match = (res.data as any[]).find(raw => raw?.id === item.card_id) ?? (res.data as any[])[0]
+            if (!match) continue
+            const sealedVariant = (match.variants ?? []).find((v: any) => v?.condition === 'Sealed') ?? match.variants?.[0]
+            const variantId = sealedVariant?.id
+            if (variantId) {
+              await window.electronAPI.db.update(item.id, 'variant_id', variantId)
+              item.variant_id = variantId
+            }
+          } catch (err) {
+            console.error('Failed to backfill sealed variant_id:', err)
+          }
+        }
+      }
+
       const toRefresh = inventory.filter(c => !c.is_sold && c.variant_id)
       if (toRefresh.length === 0) return
 
@@ -568,52 +616,84 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-screen flex overflow-hidden">
       <div className="ambient-bg" />
-      <Header
-        onAddCard={() => setIsSearchOpen(true)}
-        onRefreshPrices={handleRefreshPrices}
-        onExportCsv={handleExportCsv}
-        onExportDb={handleExportDb}
-        onImportDb={handleImportDb}
-        isRefreshing={isRefreshing}
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggle={toggleSidebar}
+        currentPage={currentPage}
+        onPageChange={updateCurrentPage}
       />
-      <SummaryCards
-        summary={summary}
-        liquidationPct={liquidationPct}
-        onLiquidationPctChange={updateLiquidationPct}
-        includeHeldInPL={includeHeldInPL}
-      />
-      {activeParentFilter && (
-        <div className="mx-6 mt-4 flex items-center justify-between animate-fade-in">
-          <span className="text-sm text-surface-700">
-            Viewing contents of <span className="font-semibold text-surface-900">{parentItemName}</span>
-          </span>
-          <button
-            onClick={() => setActiveParentFilter(null)}
-            className="text-xs font-semibold text-accent-dark border border-accent/40 bg-accent/10 hover:bg-accent/20 px-3 py-1.5 rounded-md transition-colors"
-          >
-            Clear
-          </button>
-        </div>
-      )}
-      <div className="flex-1 min-h-0">
-        <DataGrid
-          rowData={filteredInventory}
-          onCellValueChanged={handleCellValueChanged}
-          onDeleteRow={handleDeleteRow}
-          onToggleSold={handleToggleSold}
-          onToggleOpened={handleToggleOpened}
-          onToggleKeep={handleToggleKeep}
-          includeHeldInPL={includeHeldInPL}
-          onToggleIncludeHeldInPL={toggleIncludeHeldInPL}
-          onViewContents={(id) => {
-            const parent = inventory.find(c => c.id === id)
-            if (parent) setRipAnimationParent(parent)
-          }}
-          onEditPulledFrom={(card) => setEditingPulledFromFor(card)}
-          onReorder={handleReorder}
+      <div className="flex-1 flex flex-col min-w-0">
+        <Header
+          onAddCard={() => setIsSearchOpen(true)}
+          onRefreshPrices={handleRefreshPrices}
+          onExportCsv={handleExportCsv}
+          onExportDb={handleExportDb}
+          onImportDb={handleImportDb}
+          isRefreshing={isRefreshing}
         />
+        {currentPage === 'portfolio' && (
+          <>
+            <SummaryCards
+              inventory={inventory}
+              summary={summary}
+              liquidationPct={liquidationPct}
+              onLiquidationPctChange={updateLiquidationPct}
+              includeHeldInPL={includeHeldInPL}
+            />
+            {activeParentFilter && (
+              <div className="mx-6 mt-3 flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-accent/8 border border-accent/20 animate-fade-in">
+                <div className="flex items-center gap-2 min-w-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-dark flex-shrink-0">
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                  </svg>
+                  <span className="text-sm text-surface-700 truncate">
+                    Viewing contents of <span className="font-semibold text-surface-900">{parentItemName}</span>
+                  </span>
+                </div>
+                <button
+                  onClick={() => setActiveParentFilter(null)}
+                  className="text-xs font-semibold text-accent-dark hover:bg-accent/15 px-2.5 py-1 rounded-md transition-colors flex-shrink-0"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+            <div className="flex-1 min-h-0">
+              <DataGrid
+                rowData={filteredInventory}
+                onCellValueChanged={handleCellValueChanged}
+                onDeleteRow={handleDeleteRow}
+                onToggleSold={handleToggleSold}
+                onToggleOpened={handleToggleOpened}
+                onToggleKeep={handleToggleKeep}
+                includeHeldInPL={includeHeldInPL}
+                onToggleIncludeHeldInPL={toggleIncludeHeldInPL}
+                onViewContents={(id) => {
+                  const parent = inventory.find(c => c.id === id)
+                  if (parent) setRipAnimationParent(parent)
+                }}
+                onEditPulledFrom={(card) => setEditingPulledFromFor(card)}
+                onReorder={handleReorder}
+              />
+            </div>
+          </>
+        )}
+        {currentPage === 'settings' && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
+            <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="text-surface-500">
+                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-semibold text-surface-900">Settings</h2>
+            <p className="text-sm text-surface-500 mt-1 max-w-md">
+              App preferences will live here. Nothing built yet — let us know what you'd like to configure first.
+            </p>
+          </div>
+        )}
       </div>
       <SearchModal
         isOpen={isSearchOpen}

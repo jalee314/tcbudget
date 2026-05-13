@@ -56,6 +56,7 @@ export interface SealedProduct {
   pack_count: number
   market_price: number
   image_url: string
+  variant_id?: string | null
 }
 
 export interface PortfolioSummary {
