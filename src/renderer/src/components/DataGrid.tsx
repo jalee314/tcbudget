@@ -801,11 +801,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
       cellDataType: 'number',
       cellRenderer: PurchasePriceRenderer,
       sortable: true,
-      cellStyle: (params) => {
-        const d = params.data
-        const center = d && d.purchase_price === 0 && !d.__isGroup
-        return { lineHeight: 'normal', overflow: 'hidden', justifyContent: center ? 'center' : 'flex-start' }
-      }
+      cellStyle: { lineHeight: 'normal', justifyContent: 'center', overflow: 'hidden' }
     },
     {
       headerName: 'COST BASIS',

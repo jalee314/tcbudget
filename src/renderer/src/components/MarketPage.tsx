@@ -657,12 +657,7 @@ function BrowseView({ watchlistIds, onAddToWatchlist, onAddToPortfolioFromCard, 
             </div>
           )
         ) : mode === 'cards' ? (
-          <div className="px-6 py-3"><div className="space-y-1">{/* search results below */}</div></div>
-        ) : (
-          <div className="px-6 py-3">{/* search results below */}</div>
-        )}
-        {query.trim() && mode === 'cards' ? (
-          <div className="space-y-1">
+          <div className="px-6 py-3 space-y-1">
             {cardResults.map(card => {
               const nm = pickNMVariant(card.variants ?? [])
               const watchId = `card:${card.id}:${nm?.id ?? 'nm'}`
@@ -709,7 +704,7 @@ function BrowseView({ watchlistIds, onAddToWatchlist, onAddToPortfolioFromCard, 
             })}
           </div>
         ) : (
-          <div className="space-y-1">
+          <div className="px-6 py-3 space-y-1">
             {sealedResults.map(product => {
               const watchId = `sealed:${product.id}`
               const isWatched = watchlistIds.has(watchId)

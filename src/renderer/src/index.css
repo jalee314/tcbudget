@@ -127,10 +127,27 @@ body {
 .ag-theme-custom-light .ag-cell {
   display: flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   padding-left: 16px;
   padding-right: 16px;
   font-variant-numeric: tabular-nums;
   overflow: hidden;
+}
+
+/* The Item column pairs a card image with its name — centering would push
+   the cluster to the middle of the cell. Keep it left-anchored. */
+.ag-theme-custom-light .ag-cell[col-id="name"] {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+/* Headers follow their column's alignment so labels line up with values. */
+.ag-theme-custom-light .ag-header-cell .ag-header-cell-label {
+  justify-content: center;
+}
+.ag-theme-custom-light .ag-header-cell[col-id="name"] .ag-header-cell-label {
+  justify-content: flex-start;
 }
 
 .ag-theme-custom-light .ag-cell-value {
