@@ -1,6 +1,6 @@
 import React from 'react'
 
-export type Page = 'portfolio' | 'settings'
+export type Page = 'portfolio' | 'analytics' | 'market' | 'settings'
 
 interface SidebarProps {
   collapsed: boolean
@@ -58,6 +58,18 @@ const Icons = {
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 12a9 9 0 1 1-9-9" />
       <path d="M21 12A9 9 0 0 0 12 3v9z" />
+    </svg>
+  ),
+  analytics: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v18h18" />
+      <path d="M7 14l4-4 4 4 5-6" />
+    </svg>
+  ),
+  market: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7h18l-1.5 11a2 2 0 0 1-2 1.75H6.5a2 2 0 0 1-2-1.75L3 7z" />
+      <path d="M8 7V5a4 4 0 0 1 8 0v2" />
     </svg>
   ),
   settings: (
@@ -175,6 +187,20 @@ export default function Sidebar({
             label="Portfolio"
             icon={Icons.portfolio}
             onClick={() => onPageChange('portfolio')}
+          />
+          <NavItem
+            collapsed={collapsed}
+            active={currentPage === 'analytics'}
+            label="Analytics"
+            icon={Icons.analytics}
+            onClick={() => onPageChange('analytics')}
+          />
+          <NavItem
+            collapsed={collapsed}
+            active={currentPage === 'market'}
+            label="Market"
+            icon={Icons.market}
+            onClick={() => onPageChange('market')}
           />
         </div>
       </nav>

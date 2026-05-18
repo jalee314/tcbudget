@@ -17,7 +17,7 @@ html, body, #root {
 body {
   background: #F6F7F4;
   color: #111827;
-  font-family: 'Public Sans', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 /* ─── Custom Scrollbar ────────────────────────────────────────────────── */
@@ -103,7 +103,7 @@ body {
   --ag-cell-horizontal-border: 1px solid #F3F4F6;
   --ag-input-focus-border-color: #2A9D5A;
   --ag-checkbox-checked-color: #37B86C;
-  --ag-font-family: 'Public Sans', system-ui, sans-serif;
+  --ag-font-family: 'Inter', system-ui, sans-serif;
   --ag-font-size: 13px;
   --ag-grid-size: 6px;
   --ag-row-height: 52px;
@@ -393,6 +393,128 @@ body {
 [data-theme="dark"] .ambient-bg {
   display: none;
 }
+
+/* ─── 3D Carousel ─────────────────────────────────────────────────────── */
+.carousel-3d {
+  position: relative;
+  width: 100%;
+  height: 460px;
+  perspective: 1600px;
+  overflow: hidden;
+  user-select: none;
+}
+
+.carousel-3d-stage {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+.carousel-3d-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 220px;
+  height: 308px;
+  margin-left: -110px;
+  margin-top: -154px;
+  border-radius: 14px;
+  overflow: hidden;
+  transition:
+    transform 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 420ms ease-out,
+    box-shadow 420ms ease-out;
+  will-change: transform, opacity;
+  cursor: pointer;
+  background: #FFFFFF;
+}
+
+.carousel-3d-card.is-center {
+  box-shadow:
+    0 0 0 1px rgba(55, 184, 108, 0.4),
+    0 20px 50px rgba(17, 24, 39, 0.32),
+    0 6px 18px rgba(55, 184, 108, 0.18);
+}
+
+.carousel-3d-card:not(.is-center) {
+  box-shadow: 0 14px 32px rgba(17, 24, 39, 0.28);
+}
+
+.carousel-3d-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+.carousel-3d-reflection {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 320px;
+  height: 60px;
+  margin-left: -160px;
+  background: radial-gradient(ellipse at center top,
+    rgba(17, 24, 39, 0.28) 0%,
+    rgba(17, 24, 39, 0.10) 40%,
+    rgba(17, 24, 39, 0) 80%);
+  filter: blur(8px);
+  pointer-events: none;
+}
+
+[data-theme="dark"] .carousel-3d-card {
+  background: #0E0E0E;
+}
+
+[data-theme="dark"] .carousel-3d-card.is-center {
+  box-shadow:
+    0 0 0 1px rgba(55, 184, 108, 0.45),
+    0 20px 50px rgba(0, 0, 0, 0.7),
+    0 6px 18px rgba(55, 184, 108, 0.25);
+}
+
+[data-theme="dark"] .carousel-3d-card:not(.is-center) {
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="dark"] .carousel-3d-reflection {
+  background: radial-gradient(ellipse at center top,
+    rgba(0, 0, 0, 0.6) 0%,
+    rgba(0, 0, 0, 0.2) 40%,
+    rgba(0, 0, 0, 0) 80%);
+}
+
+.carousel-3d-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 50;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #EAEBE6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #374151;
+  box-shadow: 0 6px 16px rgba(17, 24, 39, 0.12);
+  transition: transform 160ms ease, background 160ms ease;
+  cursor: pointer;
+}
+.carousel-3d-arrow:hover { transform: translateY(-50%) scale(1.05); background: #FFFFFF; }
+.carousel-3d-arrow:disabled { opacity: 0.4; cursor: not-allowed; }
+.carousel-3d-arrow.left { left: 12px; }
+.carousel-3d-arrow.right { right: 12px; }
+
+[data-theme="dark"] .carousel-3d-arrow {
+  background: rgba(20, 20, 20, 0.92);
+  border-color: #262626;
+  color: #E5E7EB;
+}
+[data-theme="dark"] .carousel-3d-arrow:hover { background: #1A1A1A; }
 
 /* ─── Pack Open Animation ─────────────────────────────────────────────── */
 /* Neutral dark gradient using the surface palette — matches the dark

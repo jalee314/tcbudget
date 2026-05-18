@@ -8,7 +8,9 @@ import SellModal from './components/SellModal'
 import OpenModal from './components/OpenModal'
 import PulledFromEditor from './components/PulledFromEditor'
 import PackOpenAnimation from './components/PackOpenAnimation'
-import { InventoryCard, SearchCard, PortfolioSummary } from './types'
+import AnalyticsPage from './components/AnalyticsPage'
+import MarketPage, { type WatchlistItem } from './components/MarketPage'
+import { InventoryCard, SearchCard, SealedProduct, PortfolioSummary } from './types'
 import { v4 as uuidv4 } from 'uuid'
 
 const LIQUIDATION_PCT_KEY = 'liquidation_pct_v1'
@@ -17,7 +19,21 @@ const ROW_ORDER_KEY = 'inventory_row_order_v1'
 const INCLUDE_HELD_IN_PL_KEY = 'include_held_in_pl_v1'
 const SIDEBAR_COLLAPSED_KEY = 'tcbudget_sidebar_collapsed_v1'
 const CURRENT_PAGE_KEY = 'tcbudget_current_page_v1'
+const WATCHLIST_KEY = 'tcbudget_watchlist_v1'
 const AUTO_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000 // 12 hours
+
+const VALID_PAGES: Page[] = ['portfolio', 'analytics', 'market', 'settings']
+
+function loadWatchlist(): WatchlistItem[] {
+  try {
+    const raw = localStorage.getItem(WATCHLIST_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
 
 function applySavedOrder(rows: InventoryCard[]): InventoryCard[] {
   const raw = localStorage.getItem(ROW_ORDER_KEY)
@@ -63,9 +79,14 @@ export default function App() {
     try { return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1' } catch { return false }
   })
   const [currentPage, setCurrentPage] = useState<Page>(() => {
-    const raw = localStorage.getItem(CURRENT_PAGE_KEY)
-    return raw === 'settings' ? 'settings' : 'portfolio'
+    const raw = localStorage.getItem(CURRENT_PAGE_KEY) as Page | null
+    return raw && VALID_PAGES.includes(raw) ? raw : 'portfolio'
   })
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>(() => loadWatchlist())
+
+  useEffect(() => {
+    try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify(watchlist)) } catch { /* ignore */ }
+  }, [watchlist])
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed(v => {
@@ -270,6 +291,69 @@ export default function App() {
       console.error('Failed to add card:', err)
     }
   }, [])
+
+  // ─── Watchlist handlers ───────────────────────────────────────────
+  const handleAddToWatchlist = useCallback((item: WatchlistItem) => {
+    setWatchlist(prev => (prev.some(w => w.id === item.id) ? prev : [...prev, item]))
+  }, [])
+
+  const handleRemoveFromWatchlist = useCallback((id: string) => {
+    setWatchlist(prev => prev.filter(w => w.id !== id))
+  }, [])
+
+  const handleRefreshWatchlist = useCallback(async () => {
+    const withVariants = watchlist.filter(w => w.variant_id)
+    if (withVariants.length === 0 || !window.electronAPI) return
+    try {
+      const variantIds = withVariants.map(w => w.variant_id as string)
+      const result = await window.electronAPI.justtcg.batchRefresh(variantIds)
+      if (result.error) {
+        console.error('Watchlist refresh error:', result.error)
+        return
+      }
+      const priceMap = new Map<string, number>()
+      for (const raw of result.data as any[]) {
+        for (const v of raw.variants ?? []) {
+          if (v.id && v.price != null) priceMap.set(v.id, v.price)
+        }
+      }
+      const now = new Date().toISOString()
+      setWatchlist(prev => prev.map(w => {
+        if (!w.variant_id) return w
+        const next = priceMap.get(w.variant_id)
+        if (next == null) return w
+        return { ...w, last_price: next, last_updated: now }
+      }))
+    } catch (err) {
+      console.error('Failed to refresh watchlist:', err)
+    }
+  }, [watchlist])
+
+  // Bridge from MarketPage's "Add to Portfolio" buttons to the existing
+  // add-card flow. Uses the current market price as both purchase price
+  // and baseline so the row lands with zero P&L until the user edits it.
+  const handleAddToPortfolioFromCard = useCallback((
+    card: SearchCard,
+    variantId: string | null,
+    condition: string
+  ) => {
+    handleAddCard(card, card.market_price, 1, condition, 'Card', null, variantId)
+  }, [handleAddCard])
+
+  const handleAddToPortfolioFromSealed = useCallback((product: SealedProduct) => {
+    const sealedAsCard: SearchCard = {
+      id: product.id,
+      name: product.name,
+      set_name: product.set_name,
+      set_id: product.set_id,
+      card_number: '',
+      rarity: product.product_type,
+      image_url: product.image_url,
+      image_url_large: product.image_url,
+      market_price: product.market_price,
+    }
+    handleAddCard(sealedAsCard, product.market_price, 1, 'Sealed', 'Sealed', null, product.variant_id ?? null)
+  }, [handleAddCard])
 
   // ─── Delete card ──────────────────────────────────────────────────
   const handleDeleteRow = useCallback(async (id: string) => {
@@ -679,6 +763,19 @@ export default function App() {
               />
             </div>
           </>
+        )}
+        {currentPage === 'analytics' && (
+          <AnalyticsPage inventory={inventory} />
+        )}
+        {currentPage === 'market' && (
+          <MarketPage
+            watchlist={watchlist}
+            onAddToWatchlist={handleAddToWatchlist}
+            onRemoveFromWatchlist={handleRemoveFromWatchlist}
+            onRefreshWatchlist={handleRefreshWatchlist}
+            onAddToPortfolioFromCard={handleAddToPortfolioFromCard}
+            onAddToPortfolioFromSealed={handleAddToPortfolioFromSealed}
+          />
         )}
         {currentPage === 'settings' && (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
