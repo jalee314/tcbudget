@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npx electron-vite *)",
-      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(grep -n \"translate\\(0px, \\\\${dragY}px\\)\\\\|translate\\(-50%, -260%\\)\" /Users/jason.leee/tcbudget/src/renderer/src/components/PackOpenAnimation.tsx)"
     ],
     "additionalDirectories": [
       "C:\\Users\\jason\\tcbudget\\src\\renderer\\src\\assets"

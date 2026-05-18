@@ -18,6 +18,22 @@ function saveRevealMode(mode: RevealMode): void {
   try { localStorage.setItem(REVEAL_MODE_KEY, mode) } catch { /* ignore */ }
 }
 
+const RIP_MODE_KEY = 'pack_open_rip_mode_v1'
+type RipMode = 'auto' | 'manual'
+function loadRipMode(): RipMode {
+  try {
+    return localStorage.getItem(RIP_MODE_KEY) === 'auto' ? 'auto' : 'manual'
+  } catch {
+    return 'manual'
+  }
+}
+function saveRipMode(mode: RipMode): void {
+  try { localStorage.setItem(RIP_MODE_KEY, mode) } catch { /* ignore */ }
+}
+// How far the user must pull the lid (diagonally up-left, in px) before
+// the rip completes. Combined magnitude of the drag vector.
+const RIP_THRESHOLD_PX = 110
+
 interface Props {
   parentItem: InventoryCard
   cards: InventoryCard[]
@@ -240,6 +256,25 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
       return next
     })
   }, [])
+  const [ripMode, setRipMode] = useState<RipMode>(() => loadRipMode())
+  const toggleRipMode = useCallback(() => {
+    setRipMode(m => {
+      const next = m === 'auto' ? 'manual' : 'auto'
+      saveRipMode(next)
+      return next
+    })
+  }, [])
+  // Manual-rip drag state. Tear is anchored at the top-right corner and the
+  // user drags up-left. dragX/dragY are negative when going up/left; we
+  // clamp positive (downward / rightward) drags to 0 so the lid only peels
+  // one way. isFlying flips on once threshold is met — the lid then
+  // animates offscreen via inline style and the rest of the phase sequence
+  // fires.
+  const [dragX, setDragX] = useState(0)
+  const [dragY, setDragY] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
+  const [isFlying, setIsFlying] = useState(false)
+  const dragStartRef = useRef({ x: 0, y: 0 })
   // In reveal-one mode, tracks which cards have been flipped face-up.
   // (In reveal-all mode this set is ignored — every card is treated as flipped.)
   const [flippedCardIds, setFlippedCardIds] = useState<Set<string>>(new Set())
@@ -346,16 +381,90 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
   // back to the procedural pack). Nothing renders before this.
   const animationStarted = imageLookupDone
 
+  // Fires the rip → extract → spread → settled chain. Used by the auto-rip
+  // timer below AND by the manual-rip drag handler when the user pulls the
+  // lid past the threshold. Captures the moment-of-rip as t=0 so timings
+  // chain identically regardless of how the rip was triggered.
+  const startPostRipSequence = useCallback(() => {
+    setPhase(p => (p === 'enter' ? 'rip' : p))
+    const ripToExtract = PHASE_TIMINGS.extract - PHASE_TIMINGS.rip
+    const ripToSpread = PHASE_TIMINGS.spread - PHASE_TIMINGS.rip
+    const ripToSettled = PHASE_TIMINGS.settled - PHASE_TIMINGS.rip
+    setTimeout(() => setPhase('extract'), ripToExtract)
+    setTimeout(() => setPhase('spread'), ripToSpread)
+    setTimeout(() => setPhase('settled'), ripToSettled)
+  }, [])
+
   useEffect(() => {
     if (!animationStarted) return
-    const timers = [
-      setTimeout(() => setPhase('rip'), PHASE_TIMINGS.rip),
-      setTimeout(() => setPhase('extract'), PHASE_TIMINGS.extract),
-      setTimeout(() => setPhase('spread'), PHASE_TIMINGS.spread),
-      setTimeout(() => setPhase('settled'), PHASE_TIMINGS.settled)
-    ]
-    return () => timers.forEach(clearTimeout)
-  }, [animationStarted])
+    if (ripMode === 'manual') return // wait for the user to pull the lid
+    const ripTimer = setTimeout(startPostRipSequence, PHASE_TIMINGS.rip)
+    return () => clearTimeout(ripTimer)
+  }, [animationStarted, ripMode, startPostRipSequence])
+
+  // ─── Manual rip — drag the lid's top-right corner up-left ────────────────
+  const onLidMouseDown = useCallback((e: React.MouseEvent) => {
+    if (ripMode !== 'manual') return
+    if (phase !== 'enter' || isFlying) return
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+    // Subtract current drag so re-grabbing a partially-pulled lid is smooth.
+    dragStartRef.current = { x: e.clientX - dragX, y: e.clientY - dragY }
+  }, [ripMode, phase, isFlying, dragX, dragY])
+
+  useEffect(() => {
+    if (!isDragging) return
+    const onMove = (e: MouseEvent) => {
+      // Clamp to the up-left quadrant — the rip only propagates one way.
+      setDragX(Math.min(0, e.clientX - dragStartRef.current.x))
+      setDragY(Math.min(0, e.clientY - dragStartRef.current.y))
+    }
+    const onUp = () => {
+      setIsDragging(false)
+      // Read latest values via state setters — closure is stale otherwise.
+      let x = 0
+      let y = 0
+      setDragX(curr => { x = curr; return curr })
+      setDragY(curr => { y = curr; return curr })
+      // Defer threshold check to next tick so we have the latest x,y.
+      queueMicrotask(() => {
+        const mag = Math.hypot(x, y)
+        if (mag >= RIP_THRESHOLD_PX && y <= -30) {
+          setIsFlying(true)
+          startPostRipSequence()
+        } else {
+          // Snap back smoothly.
+          setDragX(0)
+          setDragY(0)
+        }
+      })
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [isDragging, startPostRipSequence])
+
+  // Drag progress (0 → 1) used to fade in the tear-line glow and shadow as
+  // the user approaches the threshold.
+  const ripProgress = ripMode === 'manual'
+    ? Math.min(1, Math.hypot(dragX, dragY) / RIP_THRESHOLD_PX)
+    : 0
+
+  // Lid transform during manual drag. The pack lid is anchored at its
+  // bottom-left (the tear hinge), so rotation peels the right corner up;
+  // a fraction of the cursor's translation is also applied so the corner
+  // visibly tracks the mouse. The rotation magnitude is capped so a wild
+  // mouse fling doesn't spin the lid endlessly before the rip completes.
+  const dragMag = Math.hypot(dragX, dragY)
+  // CCW rotation when pulling up-left. Negative in CSS = counter-clockwise.
+  const dragRotation = -Math.min(48, dragMag * 0.45)
+  // Translate at ~40% of cursor delta — the lid feels heavy / resistant.
+  const lidTranslateX = dragX * 0.4
+  const lidTranslateY = dragY * 0.55
 
   // ─── Sound effects ────────────────────────────────────────────────────
   // Each phase transition fires its corresponding SFX. Refs guard against
@@ -400,7 +509,13 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
     return () => window.removeEventListener('keydown', handler)
   }, [onClose, selectedIndex, cards.length])
 
-  const skipToEnd = () => setPhase('settled')
+  const skipToEnd = () => {
+    // In manual mode, the lid is driven by inline style, not the CSS keyframe.
+    // Mark it flying so it animates offscreen alongside the jump to settled.
+    if (ripMode === 'manual' && !isFlying) setIsFlying(true)
+    setIsDragging(false)
+    setPhase('settled')
+  }
 
   const useFan = cards.length <= 7
   const accent = useMemo(() => packAccentFor(parentItem.set_name || parentItem.name), [parentItem])
@@ -576,6 +691,28 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
         style={{ top: 52 }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Rip mode toggle — auto plays the rip animation; manual lets you
+            drag the lid up with your cursor to tear it open. */}
+        <button
+          onClick={toggleRipMode}
+          className="w-9 h-9 flex items-center justify-center rounded-full text-white/80 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm"
+          title={ripMode === 'auto' ? 'Rip: auto (click to switch to manual drag)' : 'Rip: drag with cursor (click to switch to auto)'}
+        >
+          {ripMode === 'manual' ? (
+            // Hand-pointer icon — signals "you grab it"
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 11V6a2 2 0 1 0-4 0v5"/>
+              <path d="M14 10V4a2 2 0 1 0-4 0v6"/>
+              <path d="M10 10.5V6a2 2 0 1 0-4 0v8"/>
+              <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
+            </svg>
+          ) : (
+            // Zap / auto icon
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+          )}
+        </button>
         {/* Reveal mode toggle */}
         <button
           onClick={toggleRevealMode}
@@ -664,6 +801,29 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
         )}
       </div>
 
+      {/* Manual rip hint — only shown while the user can still tear the pack. */}
+      {animationStarted && ripMode === 'manual' && phase === 'enter' && !isFlying && (
+        <div
+          className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-20 select-none"
+          style={{
+            bottom: 80,
+            opacity: isDragging ? 0.35 : 1,
+            transition: 'opacity 200ms ease-out'
+          }}
+        >
+          <div className="flex flex-col items-center gap-1 text-white/60">
+            {/* Diagonal up-left arrow */}
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-bounce">
+              <path d="M19 19 5 5" />
+              <path d="M14 5H5v9" />
+            </svg>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em]">
+              Pull corner up &amp; left to tear
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Loading hint — shown only while the booster pack image lookup is in flight */}
       {!animationStarted && showLoadingHint && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -705,23 +865,61 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
                     }}
                   />
                 </div>
-                {/* Lid — top sliver that rips off as one solid piece.
-                    The wobbled rotation around the left hinge gives it a
-                    real "perforation tearing" feel without the lid
-                    visually disappearing during the motion. */}
-                <div className={`pack-half pack-top ${phase === 'rip' || isExtractedOrLater ? 'pack-top-rip' : ''}`}>
+                {/* Lid — torn corner that rips off the upper-right of the pack.
+                    Auto mode: the CSS @keyframes animation handles the tear.
+                    Manual mode: an inline transform tracks the user's cursor
+                    drag (translate + rotate around the bottom-left hinge),
+                    then animates offscreen when the threshold is met. */}
+                <div
+                  className={`pack-half pack-top ${ripMode === 'auto' && (phase === 'rip' || isExtractedOrLater) ? 'pack-top-rip' : ''}`}
+                  onMouseDown={onLidMouseDown}
+                  style={ripMode === 'manual' ? {
+                    transform: isFlying
+                      ? 'translate(-90%, -280%) rotate(-86deg)'
+                      : `translate(${lidTranslateX}px, ${lidTranslateY}px) rotate(${dragRotation}deg)`,
+                    opacity: isFlying ? 0 : 1,
+                    transition: isDragging
+                      ? 'none'
+                      : isFlying
+                        ? 'transform 750ms cubic-bezier(0.5, 0, 0.55, 1), opacity 500ms ease-out 250ms'
+                        : 'transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+                    cursor: phase === 'enter' && !isFlying
+                      ? (isDragging ? 'grabbing' : 'grab')
+                      : undefined,
+                    pointerEvents: phase === 'enter' && !isFlying ? 'auto' : 'none',
+                    // Drop shadow strengthens as the lid lifts away from the pack body.
+                    filter: ripProgress > 0
+                      ? `drop-shadow(${-2 - ripProgress * 6}px ${4 + ripProgress * 8}px ${6 + ripProgress * 14}px rgba(0,0,0,${0.25 + ripProgress * 0.35}))`
+                      : undefined
+                  } : undefined}
+                >
                   {packImage ? (
                     <img src={packImage} alt="" className="pack-art-image" draggable={false} />
                   ) : (
                     <PackArt setName={parentItem.set_name || parentItem.name} />
                   )}
+                  {/* Right-corner grip indicator — only shown in manual mode
+                      while the lid is intact. Tells the user where to grab. */}
+                  {ripMode === 'manual' && phase === 'enter' && !isFlying && !isDragging && (
+                    <div className="pack-grip-hint" aria-hidden>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17 7 7 17" />
+                        <path d="M17 17V7H7" />
+                      </svg>
+                    </div>
+                  )}
                 </div>
-                {/* tear glow line */}
+                {/* tear glow line. Phase rip lights it up in auto mode; in
+                    manual mode it fades in proportionally as the user pulls. */}
                 <div
                   className="pack-rip-line"
                   style={{
-                    opacity: phase === 'rip' ? 1 : 0,
-                    transition: 'opacity 200ms ease-out'
+                    opacity: ripMode === 'manual'
+                      ? (isFlying ? 1 : ripProgress)
+                      : (phase === 'rip' ? 1 : 0),
+                    transition: ripMode === 'manual' && !isDragging
+                      ? 'opacity 250ms ease-out'
+                      : 'opacity 200ms ease-out'
                   }}
                 />
               </div>

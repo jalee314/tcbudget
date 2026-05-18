@@ -1,16 +1,19 @@
 import React, { useMemo } from 'react'
 import {
   Chart as ChartJS,
-  ArcElement,
   BarElement,
   CategoryScale,
   LinearScale,
-  Tooltip
+  LineElement,
+  PointElement,
+  Tooltip,
+  Filler,
+  Legend
 } from 'chart.js'
-import { Doughnut, Bar } from 'react-chartjs-2'
+import { Line, Bar } from 'react-chartjs-2'
 import { InventoryCard } from '../types'
 
-ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip)
+ChartJS.register(BarElement, CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Filler, Legend)
 
 interface AnalyticsPageProps {
   inventory: InventoryCard[]
@@ -84,8 +87,6 @@ function InsightCard({ title, subtitle, children }: InsightCardProps) {
   )
 }
 
-const CHART_PALETTE = ['#37B86C', '#F59E0B', '#EC4899', '#8B5CF6', '#0EA5E9', '#EF4444']
-
 export default function AnalyticsPage({ inventory }: AnalyticsPageProps) {
   const insights = useMemo(() => {
     const held = inventory.filter(c => !c.is_sold && !c.is_opened && c.is_kept !== 1)
@@ -109,15 +110,27 @@ export default function AnalyticsPage({ inventory }: AnalyticsPageProps) {
     const best = sortedByPL[0] ?? null
     const worst = sortedByPL[sortedByPL.length - 1] ?? null
 
-    // Value by item type
-    const typeBuckets = new Map<string, number>()
-    for (const x of heldWithPL) {
-      const t = x.card.item_type ?? 'Card'
-      typeBuckets.set(t, (typeBuckets.get(t) ?? 0) + x.market)
+    // Cost vs current value over time: walk held positions in purchase-date
+    // order, accumulating both lines. Multiple buys on the same date collapse
+    // into one point so the chart isn't densely stacked at popular dates.
+    const datedHeld = heldWithPL
+      .filter(x => !!x.card.purchase_date)
+      .sort((a, b) => (a.card.purchase_date ?? '').localeCompare(b.card.purchase_date ?? ''))
+
+    let cumCost = 0
+    let cumMarket = 0
+    const valueOverTime: { date: string; cost: number; market: number }[] = []
+    for (const x of datedHeld) {
+      cumCost += x.cost
+      cumMarket += x.market
+      const last = valueOverTime[valueOverTime.length - 1]
+      if (last && last.date === x.card.purchase_date) {
+        last.cost = cumCost
+        last.market = cumMarket
+      } else {
+        valueOverTime.push({ date: x.card.purchase_date!, cost: cumCost, market: cumMarket })
+      }
     }
-    const typeSlices = Array.from(typeBuckets.entries())
-      .filter(([, v]) => v > 0)
-      .sort((a, b) => b[1] - a[1])
 
     // P&L by set (top 8 by absolute P&L)
     const setBuckets = new Map<string, number>()
@@ -150,7 +163,9 @@ export default function AnalyticsPage({ inventory }: AnalyticsPageProps) {
       avgRoi,
       best,
       worst,
-      typeSlices,
+      valueOverTime,
+      heldCost,
+      heldMarket,
       setRows,
       movers,
       realized,
@@ -177,31 +192,89 @@ export default function AnalyticsPage({ inventory }: AnalyticsPageProps) {
     )
   }
 
-  // ─── Donut: Value by item type ──────────────────────────────────────────
-  const typeTotal = insights.typeSlices.reduce((s, [, v]) => s + v, 0)
-  const donutData = {
-    labels: insights.typeSlices.map(([k]) => k),
-    datasets: [{
-      data: insights.typeSlices.map(([, v]) => v),
-      backgroundColor: insights.typeSlices.map((_, i) => CHART_PALETTE[i % CHART_PALETTE.length]),
-      borderWidth: 0,
-      hoverOffset: 4
-    }]
+  // ─── Line: Cost basis vs Current value over time ────────────────────────
+  const formatShortDate = (iso: string): string => {
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return iso
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
   }
-  const donutOptions = {
-    cutout: '64%',
+  const valueOverTimeData = {
+    labels: insights.valueOverTime.map(p => p.date),
+    datasets: [
+      {
+        label: 'Cost Basis',
+        data: insights.valueOverTime.map(p => p.cost),
+        borderColor: '#94A3B8',
+        backgroundColor: 'rgba(148, 163, 184, 0.08)',
+        borderWidth: 2,
+        tension: 0.25,
+        pointRadius: 2,
+        pointHoverRadius: 5,
+        pointBackgroundColor: '#94A3B8'
+      },
+      {
+        label: 'Current Value',
+        data: insights.valueOverTime.map(p => p.market),
+        borderColor: '#10B981',
+        backgroundColor: 'rgba(16, 185, 129, 0.12)',
+        borderWidth: 2,
+        tension: 0.25,
+        pointRadius: 2,
+        pointHoverRadius: 5,
+        pointBackgroundColor: '#10B981',
+        fill: '-1' as const
+      }
+    ]
+  }
+  const valueOverTimeOptions = {
     plugins: {
-      legend: { display: false },
+      legend: {
+        display: true,
+        position: 'bottom' as const,
+        labels: {
+          boxWidth: 10,
+          boxHeight: 10,
+          font: { size: 11 },
+          color: '#6B7280',
+          usePointStyle: true,
+          pointStyle: 'circle' as const,
+          padding: 12
+        }
+      },
       tooltip: {
         backgroundColor: 'rgba(17, 24, 39, 0.95)',
         titleFont: { size: 11, weight: 600 as const },
         bodyFont: { size: 11 },
         padding: 8,
         callbacks: {
-          label: (ctx: { parsed: number; label: string }) => {
-            const pct = typeTotal > 0 ? ((ctx.parsed / typeTotal) * 100).toFixed(1) : '0'
-            return `${formatUSD(ctx.parsed)} · ${pct}%`
+          title: (items: { label: string }[]) => formatShortDate(items[0]?.label ?? ''),
+          label: (ctx: { dataset: { label?: string }; parsed: { y: number | null } }) =>
+            `${ctx.dataset.label}: ${formatUSD(ctx.parsed.y ?? 0)}`
+        }
+      }
+    },
+    interaction: { intersect: false, mode: 'index' as const },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: {
+          color: '#6B7280',
+          font: { size: 10 },
+          maxRotation: 0,
+          autoSkip: true,
+          maxTicksLimit: 6,
+          callback: function (this: { getLabelForValue: (v: number) => string }, val: number | string) {
+            const label = typeof val === 'number' ? this.getLabelForValue(val) : String(val)
+            return formatShortDate(label)
           }
+        }
+      },
+      y: {
+        grid: { color: 'rgba(17, 24, 39, 0.06)' },
+        ticks: {
+          color: '#6B7280',
+          font: { size: 10 },
+          callback: (val: number | string) => formatUSD(Number(val))
         }
       }
     },
@@ -308,31 +381,20 @@ export default function AnalyticsPage({ inventory }: AnalyticsPageProps) {
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
         <InsightCard
-          title="Value by Item Type"
-          subtitle={`${formatUSD(typeTotal)} held across ${insights.typeSlices.length} ${insights.typeSlices.length === 1 ? 'category' : 'categories'}`}
+          title="Cost vs. Current Value"
+          subtitle={
+            insights.valueOverTime.length > 0
+              ? `${formatUSD(insights.heldCost)} invested · ${formatUSD(insights.heldMarket)} now`
+              : 'How your held portfolio has accumulated over time'
+          }
         >
-          {insights.typeSlices.length === 0 ? (
+          {insights.valueOverTime.length === 0 ? (
             <div className="h-[220px] flex items-center justify-center text-[12px] text-surface-400 italic">
-              No held items
+              No dated purchases yet
             </div>
           ) : (
-            <div className="flex items-center gap-5">
-              <div className="w-[180px] h-[180px] flex-shrink-0">
-                <Doughnut data={donutData} options={donutOptions} />
-              </div>
-              <ul className="flex-1 flex flex-col gap-2 min-w-0">
-                {insights.typeSlices.map(([label, value], i) => {
-                  const pct = typeTotal > 0 ? (value / typeTotal) * 100 : 0
-                  return (
-                    <li key={label} className="flex items-center gap-2 text-[12px] min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: CHART_PALETTE[i % CHART_PALETTE.length] }} />
-                      <span className="text-surface-700 font-medium truncate flex-1">{label}</span>
-                      <span className="text-surface-900 font-semibold tabular-nums">{formatUSD(value)}</span>
-                      <span className="text-surface-400 tabular-nums w-10 text-right">{pct.toFixed(0)}%</span>
-                    </li>
-                  )
-                })}
-              </ul>
+            <div className="h-[220px]">
+              <Line data={valueOverTimeData} options={valueOverTimeOptions} />
             </div>
           )}
         </InsightCard>

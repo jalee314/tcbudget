@@ -120,39 +120,30 @@ body {
 }
 
 .ag-theme-custom-light .ag-header-cell {
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 .ag-theme-custom-light .ag-cell {
   display: flex;
   align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-left: 10px;
+  padding-right: 10px;
   font-variant-numeric: tabular-nums;
   overflow: hidden;
-}
-
-/* The Item column pairs a card image with its name — centering would push
-   the cluster to the middle of the cell. Keep it left-anchored. */
-.ag-theme-custom-light .ag-cell[col-id="name"] {
-  justify-content: flex-start;
-  text-align: left;
-}
-
-/* Headers follow their column's alignment so labels line up with values. */
-.ag-theme-custom-light .ag-header-cell .ag-header-cell-label {
-  justify-content: center;
-}
-.ag-theme-custom-light .ag-header-cell[col-id="name"] .ag-header-cell-label {
-  justify-content: flex-start;
 }
 
 .ag-theme-custom-light .ag-cell-value {
   overflow: hidden;
   min-width: 0;
+}
+
+/* The Item column wraps long product names to two lines via line-clamp.
+   AG Grid's default cell-value style sets white-space: nowrap, which kills
+   wrapping inside the cell renderer — override it for the name column. */
+.ag-theme-custom-light .ag-cell[col-id="name"],
+.ag-theme-custom-light .ag-cell[col-id="name"] .ag-cell-value {
+  white-space: normal;
 }
 
 /* Plain text cell renderers (RarityRenderer, ConditionRenderer, etc.) return
@@ -173,6 +164,36 @@ body {
    cursor instead of just the name cell. */
 .ag-dnd-ghost {
   display: none !important;
+}
+
+/* The auto-rendered row drag handle (a span AG Grid injects when rowDrag is
+   set) is otherwise nearly invisible — give it a clear grip icon, fade it
+   in on row hover, and ensure it sits before our card-image content. */
+.ag-theme-custom-light .ag-row-drag {
+  cursor: grab;
+  width: 16px;
+  height: 100%;
+  margin-right: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #94A3B8;
+  flex-shrink: 0;
+  opacity: 0.35;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+.ag-theme-custom-light .ag-row:hover .ag-row-drag {
+  opacity: 1;
+}
+.ag-theme-custom-light .ag-row-drag:hover {
+  color: #1F2937;
+}
+.ag-theme-custom-light .ag-row-drag:active {
+  cursor: grabbing;
+}
+.ag-theme-custom-light .ag-row-drag .ag-icon {
+  font-size: 16px;
+  line-height: 1;
 }
 
 /* The clone we append to <body>. AG Grid row CSS variables don't cascade
@@ -1137,16 +1158,24 @@ body {
 .pack-top {
   top: 0;
   z-index: 2;
-  /* Only the top sliver (~12% of height) — that's the part you actually tear off */
+  /* Diagonal corner-tear shape. Wider on the right (where the user grabs)
+     and tapers to a thin sliver on the left where the tear ends. The path
+     between is jagged with varying perforation depths so the foil looks
+     torn rather than cleanly cut. */
   clip-path: polygon(
-    0 0, 100% 0, 100% 11%,
-    96% 13%, 90% 10%, 84% 13%, 78% 11%, 72% 14%, 66% 11%,
-    60% 13%, 54% 11%, 48% 14%, 42% 11%, 36% 13%, 30% 11%,
-    24% 14%, 18% 11%, 12% 13%, 6% 11%, 0 13%
+    /* top edge */
+    0 0, 100% 0,
+    /* right edge down to where the tear starts (the deepest cut) */
+    100% 18%,
+    /* jagged tear, deep on the right and shallow on the left */
+    97% 15%, 94% 19%, 91% 14%, 87% 17%, 83% 13%, 79% 16%,
+    75% 12%, 71% 15%, 67% 11%, 63% 14%, 59% 10%, 55% 13%,
+    51% 9%, 47% 12%, 43% 8%, 39% 11%, 35% 7%, 31% 10%,
+    27% 6%, 23% 9%, 19% 5%, 15% 8%, 11% 4%, 7% 7%, 3% 3%, 0 5%
   );
-  /* Pivot at the bottom-left of the lid so a CCW rotation lifts the
-     RIGHT edge first — the foil is "torn" from right to left. */
-  transform-origin: 0% 13%;
+  /* Pivot at the bottom-left of the lid (where the tear ENDS). CCW
+     rotation lifts the RIGHT edge — the foil tears from right to left. */
+  transform-origin: 0% 5%;
 }
 
 /* Lid rip — the lid stays as one solid piece for the entire animation.
@@ -1175,11 +1204,16 @@ body {
 .pack-bottom {
   top: 0;
   z-index: 1;
-  /* Body — everything below the tear line stays in place */
+  /* Body — mirrors the lid's tear path so the two halves line up exactly
+     when the lid is in place. Once the lid is torn off, this jagged edge
+     remains visible at the top of the body. */
   clip-path: polygon(
-    0 13%, 6% 11%, 12% 13%, 18% 11%, 24% 14%, 30% 11%,
-    36% 13%, 42% 11%, 48% 14%, 54% 11%, 60% 13%, 66% 11%,
-    72% 14%, 78% 11%, 84% 13%, 90% 10%, 96% 13%, 100% 11%,
+    /* tear edge (mirror of pack-top), traversed left → right */
+    0 5%, 3% 3%, 7% 7%, 11% 4%, 15% 8%, 19% 5%, 23% 9%, 27% 6%,
+    31% 10%, 35% 7%, 39% 11%, 43% 8%, 47% 12%, 51% 9%, 55% 13%,
+    59% 10%, 63% 14%, 67% 11%, 71% 15%, 75% 12%, 79% 16%, 83% 13%,
+    87% 17%, 91% 14%, 94% 19%, 97% 15%, 100% 18%,
+    /* right edge down + bottom + left edge back up */
     100% 100%, 0 100%
   );
 }
@@ -1198,10 +1232,36 @@ body {
   filter: blur(1px);
 }
 
+/* Pulsing arrow in the top-right of the pack that shows the user where to
+   grab when manual rip mode is active. Sits above the pack art so it's
+   clearly visible; fades out smoothly during the drag. */
+.pack-grip-hint {
+  position: absolute;
+  top: 6%;
+  right: 6%;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(252, 211, 77, 0.95);
+  color: #1A1A1A;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 0 0 0 rgba(252, 211, 77, 0.7), 0 4px 10px rgba(0, 0, 0, 0.25);
+  animation: packGripPulse 1.6s ease-out infinite;
+}
+@keyframes packGripPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(252, 211, 77, 0.7), 0 4px 10px rgba(0, 0, 0, 0.25); transform: scale(1); }
+  60%  { box-shadow: 0 0 0 14px rgba(252, 211, 77, 0), 0 4px 10px rgba(0, 0, 0, 0.25); transform: scale(1.06); }
+  100% { box-shadow: 0 0 0 0 rgba(252, 211, 77, 0), 0 4px 10px rgba(0, 0, 0, 0.25); transform: scale(1); }
+}
+
 .pack-rip-line {
   position: absolute;
-  left: -10%;
-  right: -10%;
+  left: -8%;
+  right: -8%;
   top: 11%;
   height: 3px;
   background: linear-gradient(90deg, transparent 0%, #FCD34D 20%, #FFFFFF 50%, #FCD34D 80%, transparent 100%);
@@ -1209,6 +1269,10 @@ body {
   box-shadow: 0 0 16px rgba(252, 211, 77, 0.9), 0 0 32px rgba(252, 211, 77, 0.6);
   pointer-events: none;
   z-index: 4;
+  /* The tear runs from y=5% on the left to y=18% on the right (≈ -7°). The
+     glow line is rotated to follow that diagonal. */
+  transform: rotate(-7deg);
+  transform-origin: 50% 50%;
 }
 
 .pack-placeholder {
