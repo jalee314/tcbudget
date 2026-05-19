@@ -141,8 +141,8 @@ export default function Sidebar({
           }`}
           aria-hidden={collapsed}
         >
-          <h1 className="text-sm font-bold text-surface-900 tracking-tight whitespace-nowrap">
-            TC<span className="text-surface-600">Budget</span>
+          <h1 className="text-sm font-bold tracking-tight whitespace-nowrap">
+            <span className="text-surface-600">TC</span><span className="text-surface-600">Budget</span>
           </h1>
           <p className="text-[10px] text-surface-500 font-medium tracking-wide uppercase whitespace-nowrap">
             P&amp;L Tracker
@@ -170,13 +170,8 @@ export default function Sidebar({
       <div className="h-px bg-sidebar-border mx-3" />
 
       <nav className="flex-1 px-2 py-3 overflow-y-auto overflow-x-hidden">
-        {/* Section label space is always reserved — collapsing just fades the
-            text so nav items don't jump up/down by 28px on toggle. */}
         <div
-          className={`px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-sidebar-section-label transition-opacity duration-200 ease-out whitespace-nowrap ${
-            collapsed ? 'opacity-0' : 'opacity-100'
-          }`}
-          aria-hidden={collapsed}
+          className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-sidebar-section-label whitespace-nowrap"
         >
           Pages
         </div>
@@ -187,20 +182,6 @@ export default function Sidebar({
             label="Portfolio"
             icon={Icons.portfolio}
             onClick={() => onPageChange('portfolio')}
-          />
-          <NavItem
-            collapsed={collapsed}
-            active={currentPage === 'analytics'}
-            label="Analytics"
-            icon={Icons.analytics}
-            onClick={() => onPageChange('analytics')}
-          />
-          <NavItem
-            collapsed={collapsed}
-            active={currentPage === 'market'}
-            label="Market"
-            icon={Icons.market}
-            onClick={() => onPageChange('market')}
           />
         </div>
       </nav>

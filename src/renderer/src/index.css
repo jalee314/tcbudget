@@ -555,14 +555,9 @@ body {
 [data-theme="dark"] .carousel-3d-arrow:hover { background: #1A1A1A; }
 
 /* ─── Pack Open Animation ─────────────────────────────────────────────── */
-/* Neutral dark gradient using the surface palette — matches the dark
-   inverse of the homepage's surface-50 base, no green tint. */
+/* Flat dark surface — matches the style guide's --surface-950 panel. */
 .pack-open-bg {
-  background:
-    radial-gradient(ellipse at center top, rgba(55, 65, 81, 0.55) 0%, rgba(0, 0, 0, 0) 60%),
-    linear-gradient(180deg, #0b1322 0%, #06090f 100%);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: #030712;
 }
 
 .pack-wrap {
@@ -606,6 +601,10 @@ body {
   border-radius: 12px;
   overflow: visible;
   filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.6));
+  /* 3D context — lets the lid curl forward out of the screen as it peels. */
+  perspective: 1200px;
+  perspective-origin: 50% 30%;
+  transform-style: preserve-3d;
 }
 
 .pack-half {
@@ -617,6 +616,8 @@ body {
   overflow: hidden;
   transition: transform 600ms cubic-bezier(0.5, 0, 0.2, 1), opacity 600ms ease-out;
   will-change: transform, opacity;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
 }
 
 .pack-art-image {
@@ -914,17 +915,13 @@ body {
 .open-all-btn:active { transform: translateY(0); }
 
 /* ─── Pull summary banner ───────────────────────────────────────────── */
-/* Styled like a homepage glass-card, but adapted for the dark backdrop. */
+/* Flat dark card — matches style guide --surface-900 with a thin border. */
 .pull-summary-banner {
-  background: linear-gradient(180deg, rgba(31, 41, 55, 0.94) 0%, rgba(17, 24, 39, 0.94) 100%);
-  border: 1px solid rgba(229, 231, 235, 0.10);
-  border-radius: 16px;
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 14px;
   padding: 16px 26px;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.04) inset,
-    0 16px 40px rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 30%);
   animation: pullSummaryIn 540ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -1158,78 +1155,75 @@ body {
 .pack-top {
   top: 0;
   z-index: 2;
-  /* Diagonal corner-tear shape. Wider on the right (where the user grabs)
-     and tapers to a thin sliver on the left where the tear ends. The path
-     between is jagged with varying perforation depths so the foil looks
-     torn rather than cleanly cut. */
+  /* Thin top sliver at baseline y=4.7%. Used only in AUTO mode; manual
+     mode overrides clip-path with a procedural polygon that grows with
+     maxTearProgress. All tear-positioned overlays (rip-line, opening,
+     transform-origin) share the same 4.7% baseline so nothing drifts. */
   clip-path: polygon(
-    /* top edge */
     0 0, 100% 0,
-    /* right edge down to where the tear starts (the deepest cut) */
-    100% 18%,
-    /* jagged tear, deep on the right and shallow on the left */
-    97% 15%, 94% 19%, 91% 14%, 87% 17%, 83% 13%, 79% 16%,
-    75% 12%, 71% 15%, 67% 11%, 63% 14%, 59% 10%, 55% 13%,
-    51% 9%, 47% 12%, 43% 8%, 39% 11%, 35% 7%, 31% 10%,
-    27% 6%, 23% 9%, 19% 5%, 15% 8%, 11% 4%, 7% 7%, 3% 3%, 0 5%
+    100% 4.7%,
+    95% 4.5%, 90% 4.2%, 85% 4.1%, 80% 4.3%, 75% 4.6%, 70% 4.9%,
+    65% 5.1%, 60% 5.2%, 55% 5.1%, 50% 4.9%, 45% 4.6%, 40% 4.3%,
+    35% 4.2%, 30% 4.3%, 25% 4.6%, 20% 4.9%, 15% 5.1%, 10% 5.2%,
+    5% 5.0%, 0 4.7%
   );
-  /* Pivot at the bottom-left of the lid (where the tear ENDS). CCW
-     rotation lifts the RIGHT edge — the foil tears from right to left. */
-  transform-origin: 0% 5%;
+  transform-origin: 0% 4.7%;
 }
 
 /* Lid rip — the lid stays as one solid piece for the entire animation.
    It hinges around the left edge so the right side lifts first, with
    small wobbles during the tearing portion to simulate the perforation
-   giving way segment by segment. Once fully detached it floats up and
-   to the left, holding its shape until it leaves the screen. */
+   giving way segment by segment. As it lifts, rotateX curls the free
+   edge forward — toward the viewer — so the torn flap reads as a
+   bending strip of paper coming out of the screen rather than a rigid
+   plate spinning off. */
 .pack-top-rip {
   animation: packTopRip 850ms cubic-bezier(0.5, 0, 0.55, 1) forwards;
 }
 
 @keyframes packTopRip {
-  0%   { transform: rotate(0deg) translate(0, 0); opacity: 1; }
-  6%   { transform: rotate(-3deg) translate(0, 0); }     /* initial tug — right side lifts */
-  10%  { transform: rotate(-2deg) translate(0, 0); }     /* tiny resist */
-  18%  { transform: rotate(-8deg) translate(0, 0); }     /* tear advances */
-  25%  { transform: rotate(-7deg) translate(0, 0); }     /* small jerk */
-  35%  { transform: rotate(-16deg) translate(0, 0); }
-  42%  { transform: rotate(-15deg) translate(0, 0); }    /* another resist */
-  52%  { transform: rotate(-26deg) translate(-2%, -4%); }/* tear nearly across */
-  65%  { transform: rotate(-38deg) translate(-10%, -35%); }/* hinge gives, lifts off */
-  78%  { transform: rotate(-52deg) translate(-22%, -100%); opacity: 1; }
-  100% { transform: rotate(-72deg) translate(-50%, -260%); opacity: 0; }
+  0%   { transform: rotate(0deg) translate(0, 0) rotateX(0deg); opacity: 1; }
+  6%   { transform: rotate(-1deg) translate(0, 0) rotateX(-10deg); }
+  10%  { transform: rotate(-1deg) translate(0, 0) rotateX(-8deg); }     /* slight resist */
+  18%  { transform: rotate(-3deg) translate(0, 0) rotateX(-22deg); }    /* tear advances — curl deepens */
+  25%  { transform: rotate(-2deg) translate(0, -1%) rotateX(-26deg); }
+  35%  { transform: rotate(-5deg) translate(-1%, -3%) rotateX(-38deg); }
+  42%  { transform: rotate(-5deg) translate(-2%, -4%) rotateX(-42deg); }
+  52%  { transform: rotate(-8deg) translate(-3%, -10%) rotateX(-52deg); }
+  65%  { transform: rotate(-14deg) translate(-7%, -35%) rotateX(-62deg); }/* gives way, bend dominant */
+  78%  { transform: rotate(-22deg) translate(-18%, -100%) rotateX(-68deg) scaleY(1.05); opacity: 1; }
+  100% { transform: rotate(-34deg) translate(-45%, -240%) rotateX(-72deg) scaleY(1.05); opacity: 0; }
 }
 
 .pack-bottom {
   top: 0;
   z-index: 1;
-  /* Body — mirrors the lid's tear path so the two halves line up exactly
-     when the lid is in place. Once the lid is torn off, this jagged edge
-     remains visible at the top of the body. */
+  /* Body — mirrors the lid's tear path so the two halves line up
+     exactly. Same point list as .pack-top, walked left → right. */
   clip-path: polygon(
-    /* tear edge (mirror of pack-top), traversed left → right */
-    0 5%, 3% 3%, 7% 7%, 11% 4%, 15% 8%, 19% 5%, 23% 9%, 27% 6%,
-    31% 10%, 35% 7%, 39% 11%, 43% 8%, 47% 12%, 51% 9%, 55% 13%,
-    59% 10%, 63% 14%, 67% 11%, 71% 15%, 75% 12%, 79% 16%, 83% 13%,
-    87% 17%, 91% 14%, 94% 19%, 97% 15%, 100% 18%,
-    /* right edge down + bottom + left edge back up */
+    0 4.7%, 5% 5.0%, 10% 5.2%, 15% 5.1%, 20% 4.9%, 25% 4.6%, 30% 4.3%,
+    35% 4.2%, 40% 4.3%, 45% 4.6%, 50% 4.9%, 55% 5.1%, 60% 5.2%,
+    65% 5.1%, 70% 4.9%, 75% 4.6%, 80% 4.3%, 85% 4.1%, 90% 4.2%,
+    95% 4.5%, 100% 4.7%,
     100% 100%, 0 100%
   );
 }
 
-/* Dark "inside the pack" visible at the torn opening */
+/* Dark "inside the pack" visible at the torn opening — sits just below
+   the tear baseline (4.7%). The body's clip-path clips this to its
+   visible region, so the dark band naturally hugs the underside of the
+   tear edge. */
 .pack-opening {
   position: absolute;
-  left: 6%;
-  right: 6%;
-  top: 11%;
-  height: 5%;
-  background: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.6) 80%, transparent 100%);
+  left: 4%;
+  right: 4%;
+  top: 4.7%;
+  height: 1.6%;
+  background: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.7) 80%, transparent 100%);
   border-radius: 2px;
   z-index: 3;
   pointer-events: none;
-  filter: blur(1px);
+  filter: blur(0.6px);
 }
 
 /* Pulsing arrow in the top-right of the pack that shows the user where to
@@ -1260,18 +1254,16 @@ body {
 
 .pack-rip-line {
   position: absolute;
-  left: -8%;
-  right: -8%;
-  top: 11%;
-  height: 3px;
+  left: -6%;
+  right: -6%;
+  top: 4.7%;
+  height: 2px;
   background: linear-gradient(90deg, transparent 0%, #FCD34D 20%, #FFFFFF 50%, #FCD34D 80%, transparent 100%);
   filter: blur(1px);
-  box-shadow: 0 0 16px rgba(252, 211, 77, 0.9), 0 0 32px rgba(252, 211, 77, 0.6);
+  box-shadow: 0 0 14px rgba(252, 211, 77, 0.9), 0 0 28px rgba(252, 211, 77, 0.6);
   pointer-events: none;
   z-index: 4;
-  /* The tear runs from y=5% on the left to y=18% on the right (≈ -7°). The
-     glow line is rotated to follow that diagonal. */
-  transform: rotate(-7deg);
+  /* New tear is roughly level (gentle wave at ~4.7%) — no diagonal rotation. */
   transform-origin: 50% 50%;
 }
 

@@ -19,10 +19,14 @@ const ROW_ORDER_KEY = 'inventory_row_order_v1'
 const INCLUDE_HELD_IN_PL_KEY = 'include_held_in_pl_v1'
 const SIDEBAR_COLLAPSED_KEY = 'tcbudget_sidebar_collapsed_v1'
 const CURRENT_PAGE_KEY = 'tcbudget_current_page_v1'
+const DARK_MODE_KEY = 'tcbudget_dark_mode_v1'
 const WATCHLIST_KEY = 'tcbudget_watchlist_v1'
 const AUTO_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000 // 12 hours
 
-const VALID_PAGES: Page[] = ['portfolio', 'analytics', 'market', 'settings']
+// Analytics and Market are temporarily hidden from the sidebar; only Portfolio
+// and Settings are reachable. Old persisted values for the hidden pages fall
+// back to 'portfolio' so users don't get stranded on a page with no nav.
+const VALID_PAGES: Page[] = ['portfolio', 'settings']
 
 function loadWatchlist(): WatchlistItem[] {
   try {
@@ -83,10 +87,33 @@ export default function App() {
     return raw && VALID_PAGES.includes(raw) ? raw : 'portfolio'
   })
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(() => loadWatchlist())
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    try { return localStorage.getItem(DARK_MODE_KEY) === '1' } catch { return false }
+  })
 
   useEffect(() => {
     try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify(watchlist)) } catch { /* ignore */ }
   }, [watchlist])
+
+  useEffect(() => {
+    if (isDark) document.documentElement.setAttribute('data-theme', 'dark')
+    else document.documentElement.removeAttribute('data-theme')
+    // Re-theme the Windows native title bar overlay so the min/max/close
+    // controls don't stay on a light background in dark mode. No-op on macOS.
+    window.electronAPI?.window?.setTitleBarOverlay(
+      isDark
+        ? { color: '#000000', symbolColor: '#E5E7EB' }
+        : { color: '#F3F4F6', symbolColor: '#111827' }
+    )
+  }, [isDark])
+
+  const toggleDark = useCallback(() => {
+    setIsDark(d => {
+      const next = !d
+      try { localStorage.setItem(DARK_MODE_KEY, next ? '1' : '0') } catch { /* ignore */ }
+      return next
+    })
+  }, [])
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed(v => {
@@ -736,12 +763,23 @@ export default function App() {
                     Viewing contents of <span className="font-semibold text-surface-900">{parentItemName}</span>
                   </span>
                 </div>
-                <button
-                  onClick={() => setActiveParentFilter(null)}
-                  className="text-xs font-semibold text-accent-dark hover:bg-accent/15 px-2.5 py-1 rounded-md transition-colors flex-shrink-0"
-                >
-                  Clear
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => {
+                      const parent = inventory.find(c => c.id === activeParentFilter)
+                      if (parent) setRipAnimationParent(parent)
+                    }}
+                    className="text-xs font-semibold text-accent-dark hover:bg-accent/15 px-2.5 py-1 rounded-md transition-colors"
+                  >
+                    View as animation
+                  </button>
+                  <button
+                    onClick={() => setActiveParentFilter(null)}
+                    className="text-xs font-semibold text-accent-dark hover:bg-accent/15 px-2.5 py-1 rounded-md transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
             )}
             <div className="flex-1 min-h-0">
@@ -778,17 +816,34 @@ export default function App() {
           />
         )}
         {currentPage === 'settings' && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
-            <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="text-surface-500">
-                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
+          <div className="flex-1 overflow-y-auto p-8">
+            <div className="max-w-2xl mx-auto">
+              <h2 className="text-xl font-semibold text-surface-900 mb-1">Settings</h2>
+              <p className="text-sm text-surface-500 mb-6">App preferences.</p>
+
+              <div className="rounded-xl border border-surface-200 bg-white">
+                <div className="flex items-center justify-between p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-surface-900">Dark mode</p>
+                    <p className="text-xs text-surface-500 mt-0.5">Use a dark color scheme across the app.</p>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={isDark}
+                    onClick={toggleDark}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                      isDark ? 'bg-accent' : 'bg-surface-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                        isDark ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
             </div>
-            <h2 className="text-lg font-semibold text-surface-900">Settings</h2>
-            <p className="text-sm text-surface-500 mt-1 max-w-md">
-              App preferences will live here. Nothing built yet — let us know what you'd like to configure first.
-            </p>
           </div>
         )}
       </div>
