@@ -1,0 +1,265 @@
+:root {
+  --brand-500: #37b86c;
+  --brand-600: #2a9d5a;
+  --brand-700: #22804a;
+  --surface-50: #f9fafb;
+  --surface-100: #f3f4f6;
+  --surface-700: #374151;
+  --surface-900: #111827;
+  --surface-950: #030712;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  color: var(--surface-900);
+  background: linear-gradient(180deg, var(--surface-50) 0%, #fff 40%, var(--surface-50) 100%);
+  line-height: 1.6;
+}
+
+a {
+  color: var(--brand-700);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-weight: 700;
+  font-size: 1.125rem;
+  color: var(--surface-900);
+  text-decoration: none;
+}
+
+.brand:hover {
+  text-decoration: none;
+}
+
+.brand img {
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+}
+
+nav {
+  display: flex;
+  gap: 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+nav a {
+  color: var(--surface-700);
+  text-decoration: none;
+}
+
+nav a:hover {
+  color: var(--brand-700);
+}
+
+main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 1.5rem 4rem;
+}
+
+.hero {
+  text-align: center;
+  padding: 3rem 0 4rem;
+}
+
+.eyebrow {
+  display: inline-block;
+  margin: 0 0 1rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: #edf9f1;
+  color: var(--brand-700);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.hero h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  max-width: 18ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.lead {
+  margin: 0 auto 2rem;
+  max-width: 42rem;
+  font-size: 1.125rem;
+  color: var(--surface-700);
+}
+
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.625rem;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn:hover {
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background: var(--brand-500);
+  color: #fff;
+  box-shadow: 0 4px 14px rgb(55 184 108 / 35%);
+}
+
+.btn-primary:hover {
+  background: var(--brand-600);
+  color: #fff;
+}
+
+.btn-secondary {
+  background: #fff;
+  color: var(--surface-900);
+  border: 1px solid var(--surface-100);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+}
+
+.note {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--surface-700);
+}
+
+.note.small {
+  margin-top: 1rem;
+}
+
+.features {
+  padding: 2rem 0 3rem;
+}
+
+.features h2,
+.download h2 {
+  text-align: center;
+  font-size: 1.75rem;
+  margin: 0 0 2rem;
+}
+
+.feature-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.feature-grid li {
+  background: #fff;
+  border: 1px solid var(--surface-100);
+  border-radius: 0.875rem;
+  padding: 1.25rem 1.35rem;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+.feature-grid h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.feature-grid p {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--surface-700);
+}
+
+.download.panel {
+  text-align: center;
+  background: var(--surface-950);
+  color: #e5e7eb;
+  border-radius: 1rem;
+  padding: 2.5rem 1.5rem;
+  margin-top: 1rem;
+}
+
+.download.panel h2 {
+  color: #fff;
+}
+
+.download.panel p {
+  max-width: 36rem;
+  margin: 0 auto 1.5rem;
+}
+
+.download.panel code {
+  background: rgb(255 255 255 / 10%);
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+}
+
+.download.panel .note {
+  color: #9ca3af;
+}
+
+footer {
+  text-align: center;
+  padding: 2rem 1.5rem 3rem;
+  font-size: 0.875rem;
+  color: var(--surface-700);
+}
+
+footer p {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .site-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  nav {
+    flex-wrap: wrap;
+  }
+}

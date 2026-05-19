@@ -2,13 +2,23 @@
   "name": "tcbudget",
   "version": "1.0.0",
   "description": "Pokémon TCG P&L Tracker — Track your collection like a stock portfolio",
+  "homepage": "https://jalee314.github.io/tcbudget/",
+  "author": "jalee314",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jalee314/tcbudget.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jalee314/tcbudget/issues"
+  },
   "main": "./out/main/index.js",
   "scripts": {
     "start": "electron-vite dev",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder --publish never",
+    "dist": "npm run build && electron-builder",
+    "dist:local": "npm run build && electron-builder --publish never",
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -40,8 +50,15 @@
     "typescript": "^5.7.2"
   },
   "build": {
-    "appId": "com.yourcompany.tcbudget",
+    "appId": "com.jalee314.tcbudget",
     "productName": "TCBudget",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "jalee314",
+        "repo": "tcbudget"
+      }
+    ],
     "files": [
       "out/**/*",
       "node_modules/**/*",

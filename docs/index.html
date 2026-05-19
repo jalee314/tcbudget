@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="TCBudget — Pokémon TCG profit & loss tracker. Track your collection like a stock portfolio."
+    />
+    <title>TCBudget — Pokémon TCG P&amp;L Tracker</title>
+    <link rel="icon" href="assets/icon.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="./">
+        <img src="assets/icon.png" width="40" height="40" alt="" />
+        <span>TCBudget</span>
+      </a>
+      <nav>
+        <a href="#features">Features</a>
+        <a href="#download">Download</a>
+        <a href="https://github.com/jalee314/tcbudget" target="_blank" rel="noopener noreferrer"
+          >GitHub</a
+        >
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Desktop app · macOS &amp; Windows</p>
+        <h1>Track your Pokémon collection like a portfolio</h1>
+        <p class="lead">
+          TCBudget helps collectors manage inventory, sealed products, pack openings, and
+          profit &amp; loss — with local data and optional live market prices.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-primary" id="download-btn" href="https://github.com/jalee314/tcbudget/releases/latest">
+            Download latest release
+          </a>
+          <a class="btn btn-secondary" href="https://github.com/jalee314/tcbudget/blob/main/README.md#development">
+            Build from source
+          </a>
+        </div>
+        <p class="note" id="release-note">Installers are published on GitHub Releases for each version tag.</p>
+      </section>
+
+      <section class="features" id="features">
+        <h2>Built for serious collectors</h2>
+        <ul class="feature-grid">
+          <li>
+            <h3>Portfolio P&amp;L</h3>
+            <p>Cost basis, market value, realized and unrealized gains in one grid.</p>
+          </li>
+          <li>
+            <h3>Sealed &amp; opened tracking</h3>
+            <p>Log boxes and packs, open sealed inventory, and tie pulls back to products.</p>
+          </li>
+          <li>
+            <h3>Pack-opening experience</h3>
+            <p>Animated reveals when you rip packs — fun without losing the numbers.</p>
+          </li>
+          <li>
+            <h3>Analytics</h3>
+            <p>Charts and breakdowns to see how your collection performs over time.</p>
+          </li>
+          <li>
+            <h3>Market watchlist</h3>
+            <p>Track cards you care about (JustTCG API key optional for live prices).</p>
+          </li>
+          <li>
+            <h3>Private by default</h3>
+            <p>SQLite database on your machine — no account required to use the app.</p>
+          </li>
+        </ul>
+      </section>
+
+      <section class="download panel" id="download">
+        <h2>Get TCBudget</h2>
+        <p>
+          Download the installer for your platform from the latest GitHub release. macOS users get a
+          <code>.dmg</code>; Windows users get an <code>.exe</code> installer.
+        </p>
+        <a class="btn btn-primary" href="https://github.com/jalee314/tcbudget/releases/latest">
+          View all releases
+        </a>
+        <p class="note small">
+          Optional: add a <code>JUSTTCG_API_KEY</code> in a <code>.env</code> file when building or
+          developing for live market data.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        <a href="https://github.com/jalee314/tcbudget">Source on GitHub</a>
+        · Pokémon is © Nintendo / Creatures / GAME FREAK. TCBudget is an unofficial fan tool.
+      </p>
+    </footer>
+
+    <script>
+      fetch('https://api.github.com/repos/jalee314/tcbudget/releases/latest')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!data?.tag_name) return
+          const el = document.getElementById('release-note')
+          if (el) el.textContent = 'Latest release: ' + data.tag_name + ' — pick the installer for your OS on the releases page.'
+        })
+        .catch(() => {})
+    </script>
+  </body>
+</html>
