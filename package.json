@@ -56,7 +56,8 @@
       {
         "provider": "github",
         "owner": "jalee314",
-        "repo": "tcbudget"
+        "repo": "tcbudget",
+        "releaseType": "release"
       }
     ],
     "files": [
