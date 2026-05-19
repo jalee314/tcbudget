@@ -36,10 +36,10 @@ function LiquidationPctEditor({ value, onChange }: { value: number; onChange: (v
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(v => !v)}
-        className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-100 text-surface-600 hover:bg-surface-200 transition-colors"
-        title="Assumed sell-through percentage"
+        className="w-8 h-8 flex items-center justify-center text-[10px] font-semibold tabular-nums rounded-lg bg-surface-100 text-surface-600 hover:bg-surface-200 transition-colors"
+        title={`Assumed sell-through ${value}% of market`}
       >
-        @ {value}%
+        {value}%
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 z-30 bg-white border border-surface-200 rounded-lg shadow-lg p-3 w-44">
@@ -53,7 +53,15 @@ function LiquidationPctEditor({ value, onChange }: { value: number; onChange: (v
               max={100}
               autoFocus
               value={draft}
-              onChange={e => setDraft(e.target.value)}
+              onChange={e => {
+                setDraft(e.target.value)
+                // Live-commit valid in-range values so the box's @X% display
+                // (and the Unrealized P&L card it drives) update as the user
+                // scrolls/types. Out-of-range or empty input keeps the last
+                // committed value in place.
+                const n = parseFloat(e.target.value)
+                if (Number.isFinite(n) && n >= 1 && n <= 100) onChange(n)
+              }}
               onKeyDown={e => { if (e.key === 'Enter') commit() }}
               className="input-dark py-1 px-2 text-sm font-mono w-full"
             />
@@ -123,11 +131,11 @@ function StatCard({ label, value, subValue, icon, variant = 'default', headerExt
     <div className={`glass-card-subtle p-5 ${borderColor} flex flex-col h-full transition-colors duration-200 hover:border-opacity-50 group min-w-0`}>
       <div className="flex items-start justify-between mb-3 gap-2 min-w-0">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-surface-500 truncate">{label}</span>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {headerExtra}
+        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
           <div className={`p-2 rounded-lg ${iconBg}`}>
             {icon}
           </div>
+          {headerExtra}
         </div>
       </div>
       <div className="mt-auto min-w-0">

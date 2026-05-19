@@ -18,21 +18,93 @@ function saveRevealMode(mode: RevealMode): void {
   try { localStorage.setItem(REVEAL_MODE_KEY, mode) } catch { /* ignore */ }
 }
 
-const RIP_MODE_KEY = 'pack_open_rip_mode_v1'
 type RipMode = 'auto' | 'manual'
+// Rip mode intentionally does NOT persist — every pack open starts in
+// manual so the user always gets the tactile pull-to-tear interaction.
+// The toggle in the header is for the current animation only.
 function loadRipMode(): RipMode {
-  try {
-    return localStorage.getItem(RIP_MODE_KEY) === 'auto' ? 'auto' : 'manual'
-  } catch {
-    return 'manual'
+  return 'manual'
+}
+function saveRipMode(_mode: RipMode): void {
+  /* no-op — rip mode is per-session */
+}
+// ─── Tear geometry & progress mapping ────────────────────────────────
+//
+// The rip is a horizontal cut traveling right → left. A small permanent
+// notch sits in the top-right corner (the "starting indentation"). As
+// `maxTearProgress` advances 0 → 1, the tear path lengthens leftward and
+// the torn flap curls forward.
+//
+// Drag-to-progress is pure distance: no speed term, no velocity, no
+// flick detection. Cursor drag distance from mousedown maps absolutely
+// to an attempted tear value; `maxTearProgress` is monotonic and only
+// updates if the attempt exceeds it.
+//
+// All tear positioning is anchored to TEAR_BASELINE_Y so every related
+// element (lid clip, body clip, opening overlay, glow line, transform
+// pivot, the matching static CSS) shares one source of truth.
+const TEAR_BASELINE_Y = 4.7      // % of pack height — y of the tear line
+const TEAR_AMPLITUDE = 0.4       // % — sine amplitude along the tear
+const TEAR_NOTCH_WIDTH = 3       // % — width of the permanent corner notch
+const TEAR_FULL_DRAG_PX = 260    // px — drag distance for a complete tear
+// Past this attempt the rip auto-completes the rest of the way and
+// kicks off the post-rip phase chain — the user doesn't have to drag
+// the last bit themselves.
+const TEAR_AUTO_COMPLETE = 0.6 
+
+// Deterministic 1-D noise. Same x always returns the same offset, so
+// the edge doesn't flicker as we rebuild the polygon during drag.
+function tearNoise(x: number): number {
+  const n = Math.sin(x * 12.9898 + 78.233) * 43758.5453
+  return n - Math.floor(n) - 0.5  // [-0.5, 0.5]
+}
+
+// Computes the x-coordinate (% of pack width) where the tear's
+// still-attached edge sits. At progress=0 the tear is just the
+// right-corner notch; at progress=1 the tear runs the full width.
+function tearLeftXFor(progress: number): number {
+  return (100 - TEAR_NOTCH_WIDTH) * (1 - progress)
+}
+
+// Generates a list of "x% y%" points walking the tear edge from xStart
+// to xEnd (direction encoded in their ordering). Lid and body share
+// this function, so they line up exactly along the shared tear edge.
+function tearEdgePoints(xStart: number, xEnd: number, steps = 24): string[] {
+  const points: string[] = []
+  for (let i = 0; i <= steps; i++) {
+    const x = xStart + ((xEnd - xStart) * i) / steps
+    const phase = ((100 - x) / 5) * Math.PI
+    const y = TEAR_BASELINE_Y + Math.sin(phase) * TEAR_AMPLITUDE + tearNoise(x) * 0.28
+    points.push(`${x.toFixed(2)}% ${y.toFixed(2)}%`)
   }
+  return points
 }
-function saveRipMode(mode: RipMode): void {
-  try { localStorage.setItem(RIP_MODE_KEY, mode) } catch { /* ignore */ }
+
+function buildLidClipPath(progress: number): string {
+  const tearLeftX = tearLeftXFor(progress)
+  const points: string[] = []
+  // top-left of the visible flap → top-right → down right edge to tear
+  points.push(`${tearLeftX.toFixed(2)}% 0%`)
+  points.push('100% 0%')
+  points.push(`100% ${TEAR_BASELINE_Y.toFixed(2)}%`)
+  // tear edge from right back to the still-attached left end
+  points.push(...tearEdgePoints(100, tearLeftX))
+  return `polygon(${points.join(', ')})`
 }
-// How far the user must pull the lid (diagonally up-left, in px) before
-// the rip completes. Combined magnitude of the drag vector.
-const RIP_THRESHOLD_PX = 110
+
+function buildBodyClipPath(progress: number): string {
+  const tearLeftX = tearLeftXFor(progress)
+  const points: string[] = []
+  // intact top edge from x=0 to the tear's left end
+  points.push('0% 0%')
+  points.push(`${tearLeftX.toFixed(2)}% 0%`)
+  // tear edge left → right
+  points.push(...tearEdgePoints(tearLeftX, 100))
+  // right edge, bottom, back up
+  points.push('100% 100%')
+  points.push('0% 100%')
+  return `polygon(${points.join(', ')})`
+}
 
 interface Props {
   parentItem: InventoryCard
@@ -137,13 +209,25 @@ function saveCachedPackImage(setKey: string, url: string): void {
 // Includes obvious non-packs (box/bundle/etb) AND look-alikes that often ride
 // along with a pack listing — art cards, code cards, sleeves — which would
 // otherwise pass a naive "name contains booster" check.
+//
+// Blister handling: TCGplayer often lists "{Set} 1-Pack Blister" / "{Set}
+// Blister Pack" alongside the standalone "{Set} Booster Pack". The blister
+// SKU usually carries a packaging photo (a card-shaped piece of cardboard
+// with "1 ADDITIONAL TCG BOOSTER PACK INSIDE" printed on it) — wrong for
+// our purpose. We reject anything matching blister/multi-pack patterns.
 const NON_PACK_KEYWORDS = [
   'box', 'bundle', 'blister', 'elite trainer', 'etb',
   'build & battle', 'build and battle', 'premium collection',
   'case', 'display', 'tin', 'collection box', 'mini tin', 'binder',
   'art card', 'code card', 'promo card', 'sleeve', 'damage counter',
   'coin', 'energy pack', 'theme deck', 'starter deck', 'deck box',
-  'playmat', 'pin', 'figure', 'plush', 'token'
+  'playmat', 'pin', 'figure', 'plush', 'token',
+  // Multi-pack / packaging variants that aren't a single bare booster
+  'single pack', '1-pack', '1 pack', '2-pack', '2 pack', '3-pack', '3 pack',
+  '4-pack', '4 pack', '6-pack', '6 pack', '10-pack', '10 pack',
+  'pack of 3', 'pack of 6', 'pack of 10',
+  'pin collection', 'gift set', 'gift box', 'tcgplayer mystery',
+  'mystery pack', 'opened pack', 'loose pack', 'preview pack', 'promo pack'
 ]
 
 function isSingleBoosterPack(name: string): boolean {
@@ -164,18 +248,36 @@ function scoreBoosterPackCandidate(raw: any, setName: string): number {
   const s = setName.toLowerCase()
 
   let score = 0
-  // Strong: name contains the exact "booster pack" phrase
-  if (n.includes('booster pack')) score += 100
-  else if (/\bbooster\b/.test(n)) score += 40
+  // Canonical match: name is essentially just "{Set} Booster Pack" with no
+  // extra qualifiers. This is overwhelmingly the bare-pack SKU whose
+  // TCGplayer image is the actual booster.
+  const stripped = n.replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+  const canonicalA = `${s} booster pack`
+  const canonicalB = `pokemon ${s} booster pack`
+  if (stripped === canonicalA || stripped === canonicalB) {
+    score += 220
+  } else if (n.includes('booster pack')) {
+    score += 100
+  } else if (/\bbooster\b/.test(n)) {
+    score += 40
+  }
 
   // Set match
   if (setN === s) score += 60
   else if (setN.includes(s) || s.includes(setN)) score += 30
   if (n.includes(s)) score += 25
 
-  // Penalty for noise tokens that sometimes leak through (variants, special
-  // editions etc.) — we want the plain "Set Booster Pack", not a re-cut.
-  if (/\b(jumbo|stamped|reverse|special|preview|prerelease)\b/.test(n)) score -= 15
+  // Strong penalty for noise tokens that suggest a re-cut / variant
+  // — we want the plain "Set Booster Pack".
+  if (/\b(jumbo|stamped|reverse|special|preview|prerelease|promo)\b/.test(n)) score -= 60
+  if (/\b(single|sleeved|loose|opened|empty)\b/.test(n)) score -= 100
+  if (/\b\d+\s*[-\s]?pack(s)?\b/.test(n)) score -= 100
+
+  // Shorter, simpler names rank higher — qualifier-laden names tend to be
+  // off-image variants ("X Booster Pack — Stamped", "X Booster Pack with
+  // Promo Card", etc.).
+  const extraChars = Math.max(0, n.length - canonicalA.length)
+  score -= extraChars * 0.5
 
   return score
 }
@@ -224,6 +326,15 @@ async function fetchBoosterPackImage(setName: string): Promise<string | null> {
     }
   }
 
+  // Surfaces the chosen SKU + its rivals — useful when the user reports
+  // "wrong image": the log will say whether we picked a blister-looking
+  // name, or whether the canonical pack's stock image is itself wrong on
+  // TCGplayer's side.
+  console.log(
+    `[PackOpenAnimation] set="${setName}" → picked "${best?.name}" (tcgplayerId=${best?.tcgplayerId}, score=${bestScore}) from`,
+    candidates.map(c => `${c.name} [score=${scoreBoosterPackCandidate(c, setName)}]`)
+  )
+
   return best?.tcgplayerId ? tcgplayerImageUrl(best.tcgplayerId) : null
 }
 
@@ -264,16 +375,23 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
       return next
     })
   }, [])
-  // Manual-rip drag state. Tear is anchored at the top-right corner and the
-  // user drags up-left. dragX/dragY are negative when going up/left; we
-  // clamp positive (downward / rightward) drags to 0 so the lid only peels
-  // one way. isFlying flips on once threshold is met — the lid then
-  // animates offscreen via inline style and the rest of the phase sequence
-  // fires.
-  const [dragX, setDragX] = useState(0)
-  const [dragY, setDragY] = useState(0)
+  // Manual-rip progress state.
+  //
+  // `maxTearProgress` is the persistent, monotonic tear value (0 → 1).
+  // It is the SAVE-STATE: on mouseup it freezes wherever it is, and a
+  // re-grab can only push it forward — never back. Refs mirror state so
+  // event handlers can read the latest value synchronously without
+  // closure staleness.
+  //
+  // Drag-to-progress is ABSOLUTE, not additive: the cursor's drag
+  // distance from mousedown maps directly to a tear attempt (0 → 1).
+  // Re-grabbing and pulling a short distance doesn't tack onto the saved
+  // max — if the new pull doesn't exceed the saved max, the lid stays
+  // exactly where it was frozen.
+  const [maxTearProgress, setMaxTearProgress] = useState(0)
+  const maxTearProgressRef = useRef(0)
+  const tearFiredRef = useRef(false)  // guards startPostRipSequence
   const [isDragging, setIsDragging] = useState(false)
-  const [isFlying, setIsFlying] = useState(false)
   const dragStartRef = useRef({ x: 0, y: 0 })
   // In reveal-one mode, tracks which cards have been flipped face-up.
   // (In reveal-all mode this set is ignored — every card is treated as flipped.)
@@ -405,40 +523,50 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
   // ─── Manual rip — drag the lid's top-right corner up-left ────────────────
   const onLidMouseDown = useCallback((e: React.MouseEvent) => {
     if (ripMode !== 'manual') return
-    if (phase !== 'enter' || isFlying) return
+    if (phase !== 'enter') return
+    if (maxTearProgressRef.current >= 1) return
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(true)
-    // Subtract current drag so re-grabbing a partially-pulled lid is smooth.
-    dragStartRef.current = { x: e.clientX - dragX, y: e.clientY - dragY }
-  }, [ripMode, phase, isFlying, dragX, dragY])
+    // Drag distance from this point maps absolutely to a tear attempt.
+    // No accumulator — the cursor IS the rip target, not an offset on
+    // top of the saved max.
+    dragStartRef.current = { x: e.clientX, y: e.clientY }
+  }, [ripMode, phase])
 
   useEffect(() => {
     if (!isDragging) return
     const onMove = (e: MouseEvent) => {
-      // Clamp to the up-left quadrant — the rip only propagates one way.
-      setDragX(Math.min(0, e.clientX - dragStartRef.current.x))
-      setDragY(Math.min(0, e.clientY - dragStartRef.current.y))
+      // Only the up-left component of the drag counts — moving back
+      // down/right can't retract the tear (MaxTearProgress is monotonic).
+      const dx = Math.min(0, e.clientX - dragStartRef.current.x)
+      const dy = Math.min(0, e.clientY - dragStartRef.current.y)
+      const dragMag = Math.hypot(dx, dy)
+      // Absolute mapping: this drag's cursor distance IS the attempted
+      // tear value, independent of where the lid was previously frozen.
+      // If the user re-grabs after a 50% rip and only pulls 25%, attempt
+      // = 0.25, which is < the saved 0.5 — so nothing changes.
+      const attempt = Math.min(1, dragMag / TEAR_FULL_DRAG_PX)
+      if (attempt > maxTearProgressRef.current) {
+        maxTearProgressRef.current = attempt
+        setMaxTearProgress(attempt)
+        // Past the auto-complete threshold the rip finishes itself —
+        // we snap maxTearProgress to 1 (the CSS transition takes the
+        // lid the rest of the way smoothly) and kick off the
+        // extract → spread → settled phase chain.
+        if (attempt >= TEAR_AUTO_COMPLETE && !tearFiredRef.current) {
+          tearFiredRef.current = true
+          setIsDragging(false)
+          maxTearProgressRef.current = 1
+          setMaxTearProgress(1)
+          startPostRipSequence()
+        }
+      }
     }
     const onUp = () => {
       setIsDragging(false)
-      // Read latest values via state setters — closure is stale otherwise.
-      let x = 0
-      let y = 0
-      setDragX(curr => { x = curr; return curr })
-      setDragY(curr => { y = curr; return curr })
-      // Defer threshold check to next tick so we have the latest x,y.
-      queueMicrotask(() => {
-        const mag = Math.hypot(x, y)
-        if (mag >= RIP_THRESHOLD_PX && y <= -30) {
-          setIsFlying(true)
-          startPostRipSequence()
-        } else {
-          // Snap back smoothly.
-          setDragX(0)
-          setDragY(0)
-        }
-      })
+      // No snap-back — the lid stays at maxTearProgress. The next
+      // mousedown will pick up from here.
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
@@ -448,23 +576,22 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
     }
   }, [isDragging, startPostRipSequence])
 
-  // Drag progress (0 → 1) used to fade in the tear-line glow and shadow as
-  // the user approaches the threshold.
-  const ripProgress = ripMode === 'manual'
-    ? Math.min(1, Math.hypot(dragX, dragY) / RIP_THRESHOLD_PX)
-    : 0
-
-  // Lid transform during manual drag. The pack lid is anchored at its
-  // bottom-left (the tear hinge), so rotation peels the right corner up;
-  // a fraction of the cursor's translation is also applied so the corner
-  // visibly tracks the mouse. The rotation magnitude is capped so a wild
-  // mouse fling doesn't spin the lid endlessly before the rip completes.
-  const dragMag = Math.hypot(dragX, dragY)
-  // CCW rotation when pulling up-left. Negative in CSS = counter-clockwise.
-  const dragRotation = -Math.min(48, dragMag * 0.45)
-  // Translate at ~40% of cursor delta — the lid feels heavy / resistant.
-  const lidTranslateX = dragX * 0.4
-  const lidTranslateY = dragY * 0.55
+  // ─── Tear-driven geometry (manual mode) ───────────────────────────────
+  //
+  // The visible flap pivots around the still-attached LEFT end of the
+  // tear (which slides leftward as progress advances). Curl deepens with
+  // progress so the more-torn portion reads as bent forward toward the
+  // viewer. The ramp is sqrt-shaped, not linear — paper starts curling
+  // visibly the moment it lifts, then plateaus near full tear. A small
+  // extra bend while actively dragging ("under tension") gives the foil
+  // a responsive, alive feel.
+  const tearLeftX = tearLeftXFor(maxTearProgress)
+  const baseCurl = -Math.sqrt(maxTearProgress) * 72
+  const tensionCurl = isDragging ? -6 : 0
+  const lidCurl = baseCurl + tensionCurl
+  const lidLift = -Math.sqrt(maxTearProgress) * 8  // px
+  const lidClipPath = useMemo(() => buildLidClipPath(maxTearProgress), [maxTearProgress])
+  const bodyClipPath = useMemo(() => buildBodyClipPath(maxTearProgress), [maxTearProgress])
 
   // ─── Sound effects ────────────────────────────────────────────────────
   // Each phase transition fires its corresponding SFX. Refs guard against
@@ -510,9 +637,13 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
   }, [onClose, selectedIndex, cards.length])
 
   const skipToEnd = () => {
-    // In manual mode, the lid is driven by inline style, not the CSS keyframe.
-    // Mark it flying so it animates offscreen alongside the jump to settled.
-    if (ripMode === 'manual' && !isFlying) setIsFlying(true)
+    // In manual mode, slam maxTearProgress to fully-torn so the lid
+    // renders as a complete tear when we jump to settled.
+    if (ripMode === 'manual') {
+      maxTearProgressRef.current = 1
+      setMaxTearProgress(1)
+      tearFiredRef.current = true
+    }
     setIsDragging(false)
     setPhase('settled')
   }
@@ -691,52 +822,56 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
         style={{ top: 52 }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Rip mode toggle — auto plays the rip animation; manual lets you
-            drag the lid up with your cursor to tear it open. */}
-        <button
-          onClick={toggleRipMode}
-          className="w-9 h-9 flex items-center justify-center rounded-full text-white/80 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm"
-          title={ripMode === 'auto' ? 'Rip: auto (click to switch to manual drag)' : 'Rip: drag with cursor (click to switch to auto)'}
-        >
-          {ripMode === 'manual' ? (
-            // Hand-pointer icon — signals "you grab it"
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 11V6a2 2 0 1 0-4 0v5"/>
-              <path d="M14 10V4a2 2 0 1 0-4 0v6"/>
-              <path d="M10 10.5V6a2 2 0 1 0-4 0v8"/>
-              <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
-            </svg>
-          ) : (
-            // Zap / auto icon
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-            </svg>
-          )}
-        </button>
-        {/* Reveal mode toggle */}
-        <button
-          onClick={toggleRevealMode}
-          className="w-9 h-9 flex items-center justify-center rounded-full text-white/80 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm"
-          title={revealMode === 'one' ? 'Reveal: one at a time (click to switch to all-at-once)' : 'Reveal: all at once (click to switch to one-by-one)'}
-        >
-          {revealMode === 'one' ? (
-            // Eye icon
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-          ) : (
-            // Stack-of-cards icon
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="14" height="18" rx="2"/>
-              <path d="M7 7h14v14"/>
-            </svg>
-          )}
-        </button>
+        {/* Rip mode toggle — only relevant while the pack is still sealed.
+            Once cards emerge, this control no longer does anything. */}
+        {phase === 'enter' && (
+          <button
+            onClick={toggleRipMode}
+            className="w-9 h-9 flex items-center justify-center rounded-md text-white/80 hover:text-white bg-[#1f2937] hover:bg-[#374151] border border-white/10 transition-colors"
+            title={ripMode === 'auto' ? 'Rip: auto (click to switch to manual drag)' : 'Rip: drag with cursor (click to switch to auto)'}
+          >
+            {ripMode === 'manual' ? (
+              // Hand-pointer icon — signals "you grab it"
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 11V6a2 2 0 1 0-4 0v5"/>
+                <path d="M14 10V4a2 2 0 1 0-4 0v6"/>
+                <path d="M10 10.5V6a2 2 0 1 0-4 0v8"/>
+                <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
+              </svg>
+            ) : (
+              // Zap / auto icon
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+            )}
+          </button>
+        )}
+        {/* Reveal mode toggle — only relevant once cards are out of the pack. */}
+        {(phase === 'spread' || phase === 'settled') && (
+          <button
+            onClick={toggleRevealMode}
+            className="w-9 h-9 flex items-center justify-center rounded-md text-white/80 hover:text-white bg-[#1f2937] hover:bg-[#374151] border border-white/10 transition-colors"
+            title={revealMode === 'one' ? 'Reveal: one at a time (click to switch to all-at-once)' : 'Reveal: all at once (click to switch to one-by-one)'}
+          >
+            {revealMode === 'one' ? (
+              // Eye icon
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            ) : (
+              // Stack-of-cards icon
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="14" height="18" rx="2"/>
+                <path d="M7 7h14v14"/>
+              </svg>
+            )}
+          </button>
+        )}
         {/* Mute toggle */}
         <button
           onClick={toggleMute}
-          className="w-9 h-9 flex items-center justify-center rounded-full text-white/80 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm"
+          className="w-9 h-9 flex items-center justify-center rounded-md text-white/80 hover:text-white bg-[#1f2937] hover:bg-[#374151] border border-white/10 transition-colors"
           title={muted ? 'Sound off (click to unmute)' : 'Sound on (click to mute)'}
         >
           {muted ? (
@@ -756,22 +891,34 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
         {phase !== 'settled' && (
           <button
             onClick={skipToEnd}
-            className="px-3 py-1.5 text-xs font-semibold text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-md transition-colors backdrop-blur-sm"
+            className="w-9 h-9 flex items-center justify-center rounded-md text-white/80 hover:text-white bg-[#1f2937] hover:bg-[#374151] border border-white/10 transition-colors"
+            title="Skip"
           >
-            Skip
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="5 4 15 12 5 20 5 4"/>
+              <line x1="19" y1="5" x2="19" y2="19"/>
+            </svg>
           </button>
         )}
         {phase === 'settled' && onViewAsList && (
           <button
             onClick={onViewAsList}
-            className="px-3 py-1.5 text-xs font-semibold text-white/90 hover:text-white bg-white/10 hover:bg-white/20 rounded-md transition-colors backdrop-blur-sm"
+            className="w-9 h-9 flex items-center justify-center rounded-md text-white/80 hover:text-white bg-[#1f2937] hover:bg-[#374151] border border-white/10 transition-colors"
+            title="View as list"
           >
-            View as list
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"/>
+              <line x1="8" y1="12" x2="21" y2="12"/>
+              <line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/>
+              <line x1="3" y1="12" x2="3.01" y2="12"/>
+              <line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
           </button>
         )}
         <button
           onClick={onClose}
-          className="w-9 h-9 flex items-center justify-center rounded-full text-white/80 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm"
+          className="w-9 h-9 flex items-center justify-center rounded-md text-white/80 hover:text-white bg-[#1f2937] hover:bg-[#374151] border border-white/10 transition-colors"
           title="Close (Esc)"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -801,8 +948,8 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
         )}
       </div>
 
-      {/* Manual rip hint — only shown while the user can still tear the pack. */}
-      {animationStarted && ripMode === 'manual' && phase === 'enter' && !isFlying && (
+      {/* Manual rip hint — only shown until the user starts tearing. */}
+      {animationStarted && ripMode === 'manual' && phase === 'enter' && maxTearProgress < 0.05 && (
         <div
           className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-20 select-none"
           style={{
@@ -849,47 +996,60 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
 
               {/* Booster pack — body stays put; only the top sliver tears off */}
               <div className="pack-frame">
-                {/* Body — bottom ~88% of the pack, stays in place after the rip */}
-                <div className="pack-half pack-bottom">
+                {/* Body — pack minus the torn flap. In manual mode the
+                    top edge is split: a straight intact run from x=0 to
+                    the tear's left end, then the jagged tear edge to the
+                    right side. In auto mode the static CSS clip-path
+                    applies. */}
+                <div
+                  className="pack-half pack-bottom"
+                  style={ripMode === 'manual' ? { clipPath: bodyClipPath } : undefined}
+                >
                   {packImage ? (
                     <img src={packImage} alt="" className="pack-art-image" draggable={false} />
                   ) : (
                     <PackArt setName={parentItem.set_name || parentItem.name} />
                   )}
-                  {/* dark "opening" inside the pack, visible after the lid tears off */}
+                  {/* Dark inside-the-pack visible behind the torn flap.
+                      In manual mode it only spans the torn portion (from
+                      tearLeftX to the right edge); in auto mode it spans
+                      the full width when the lid pops. */}
                   <div
                     className="pack-opening"
-                    style={{
+                    style={ripMode === 'manual' ? {
+                      left: `${tearLeftX}%`,
+                      right: '0%',
+                      opacity: maxTearProgress > 0.02 ? 1 : 0,
+                      transition: 'opacity 200ms ease-out, left 200ms ease-out'
+                    } : {
                       opacity: phase === 'rip' || isExtractedOrLater ? 1 : 0,
                       transition: 'opacity 250ms ease-out'
                     }}
                   />
                 </div>
-                {/* Lid — torn corner that rips off the upper-right of the pack.
-                    Auto mode: the CSS @keyframes animation handles the tear.
-                    Manual mode: an inline transform tracks the user's cursor
-                    drag (translate + rotate around the bottom-left hinge),
-                    then animates offscreen when the threshold is met. */}
+                {/* Lid — the torn flap.
+                    Manual mode: clip-path grows leftward from the
+                    corner notch as maxTearProgress advances; the flap
+                    pivots around its still-attached left end and curls
+                    forward (rotateX). On release it freezes wherever it
+                    is — MaxTearProgress is monotonic.
+                    Auto mode: the CSS keyframe handles everything. */}
                 <div
                   className={`pack-half pack-top ${ripMode === 'auto' && (phase === 'rip' || isExtractedOrLater) ? 'pack-top-rip' : ''}`}
                   onMouseDown={onLidMouseDown}
                   style={ripMode === 'manual' ? {
-                    transform: isFlying
-                      ? 'translate(-90%, -280%) rotate(-86deg)'
-                      : `translate(${lidTranslateX}px, ${lidTranslateY}px) rotate(${dragRotation}deg)`,
-                    opacity: isFlying ? 0 : 1,
+                    clipPath: lidClipPath,
+                    transformOrigin: `${tearLeftX}% ${TEAR_BASELINE_Y}%`,
+                    transform: `translateY(${lidLift}px) rotateX(${lidCurl}deg)`,
                     transition: isDragging
-                      ? 'none'
-                      : isFlying
-                        ? 'transform 750ms cubic-bezier(0.5, 0, 0.55, 1), opacity 500ms ease-out 250ms'
-                        : 'transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-                    cursor: phase === 'enter' && !isFlying
+                      ? 'transform 0ms linear, clip-path 0ms linear, transform-origin 0ms linear'
+                      : 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1), clip-path 220ms ease-out, transform-origin 220ms ease-out',
+                    cursor: phase === 'enter' && maxTearProgress < 1
                       ? (isDragging ? 'grabbing' : 'grab')
                       : undefined,
-                    pointerEvents: phase === 'enter' && !isFlying ? 'auto' : 'none',
-                    // Drop shadow strengthens as the lid lifts away from the pack body.
-                    filter: ripProgress > 0
-                      ? `drop-shadow(${-2 - ripProgress * 6}px ${4 + ripProgress * 8}px ${6 + ripProgress * 14}px rgba(0,0,0,${0.25 + ripProgress * 0.35}))`
+                    pointerEvents: phase === 'enter' && maxTearProgress < 1 ? 'auto' : 'none',
+                    filter: maxTearProgress > 0
+                      ? `drop-shadow(${-1 - maxTearProgress * 5}px ${3 + maxTearProgress * 8}px ${6 + maxTearProgress * 14}px rgba(0,0,0,${0.22 + maxTearProgress * 0.38}))`
                       : undefined
                   } : undefined}
                 >
@@ -898,9 +1058,8 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
                   ) : (
                     <PackArt setName={parentItem.set_name || parentItem.name} />
                   )}
-                  {/* Right-corner grip indicator — only shown in manual mode
-                      while the lid is intact. Tells the user where to grab. */}
-                  {ripMode === 'manual' && phase === 'enter' && !isFlying && !isDragging && (
+                  {/* Grip indicator — only at progress=0 in manual mode. */}
+                  {ripMode === 'manual' && phase === 'enter' && maxTearProgress === 0 && !isDragging && (
                     <div className="pack-grip-hint" aria-hidden>
                       <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M17 7 7 17" />
@@ -909,17 +1068,19 @@ export default function PackOpenAnimation({ parentItem, cards, onClose, onViewAs
                     </div>
                   )}
                 </div>
-                {/* tear glow line. Phase rip lights it up in auto mode; in
-                    manual mode it fades in proportionally as the user pulls. */}
+                {/* Tear glow line — sits along the tear front. In manual
+                    mode it spans only the torn portion and rides the tear
+                    leftward as it advances. */}
                 <div
                   className="pack-rip-line"
-                  style={{
-                    opacity: ripMode === 'manual'
-                      ? (isFlying ? 1 : ripProgress)
-                      : (phase === 'rip' ? 1 : 0),
-                    transition: ripMode === 'manual' && !isDragging
-                      ? 'opacity 250ms ease-out'
-                      : 'opacity 200ms ease-out'
+                  style={ripMode === 'manual' ? {
+                    left: `${Math.max(0, tearLeftX - 2)}%`,
+                    right: '-4%',
+                    opacity: maxTearProgress > 0.02 && maxTearProgress < 0.98 ? 0.9 : 0,
+                    transition: 'opacity 200ms ease-out, left 200ms ease-out'
+                  } : {
+                    opacity: phase === 'rip' ? 1 : 0,
+                    transition: 'opacity 200ms ease-out'
                   }}
                 />
               </div>
@@ -1201,7 +1362,7 @@ function InfoPanel({
             <div className="mt-8 flex items-center justify-center gap-3">
               <button
                 onClick={(e) => { e.stopPropagation(); onClose() }}
-                className="px-3 py-1.5 text-xs font-semibold text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-md transition-colors"
+                className="px-3 py-1.5 text-xs font-semibold text-white/80 hover:text-white bg-[#1f2937] hover:bg-[#374151] border border-white/10 rounded-md transition-colors"
               >
                 Back to fan
               </button>
@@ -1238,7 +1399,7 @@ function InfoPanel({
           ) : null}
         </div>
 
-        <div className="mt-5 rounded-xl p-4 bg-white/5 border border-white/10">
+        <div className="mt-5 rounded-xl p-4 bg-[#111827] border border-[#1f2937]">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-white/50">Market Price</div>
           <div className="text-3xl font-semibold text-white mt-1 tabular-nums">{formatCurrency(shown.market_price)}</div>
           {shown.quantity > 1 && (
@@ -1254,7 +1415,7 @@ function InfoPanel({
         </div>
 
         {!shown.is_sold && (
-          <div className="mt-3 rounded-xl p-4 bg-white/5 border border-white/10">
+          <div className="mt-3 rounded-xl p-4 bg-[#111827] border border-[#1f2937]">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-white/50">Unrealized G/L</div>
             <div className="flex items-baseline gap-2 mt-1">
               <span className={`text-2xl font-semibold tabular-nums ${gl >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
@@ -1283,7 +1444,7 @@ function InfoPanel({
         <div className="mt-5 flex items-center gap-3">
           <button
             onClick={(e) => { e.stopPropagation(); onClose() }}
-            className="px-3 py-1.5 text-xs font-semibold text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-md transition-colors"
+            className="px-3 py-1.5 text-xs font-semibold text-white/80 hover:text-white bg-[#1f2937] hover:bg-[#374151] border border-white/10 rounded-md transition-colors"
           >
             Back to fan
           </button>
@@ -1404,7 +1565,7 @@ function CardBack() {
 
 function DetailStat({ label, value, subtle }: { label: string; value: string; subtle?: boolean }) {
   return (
-    <div className={`rounded-lg p-3 bg-white/5 border border-white/10 ${subtle ? 'opacity-70' : ''}`}>
+    <div className={`rounded-lg p-3 bg-[#111827] border border-[#1f2937] ${subtle ? 'opacity-70' : ''}`}>
       <div className="text-[10px] font-semibold uppercase tracking-wider text-white/50">{label}</div>
       <div className="text-base font-semibold text-white mt-1 tabular-nums">{value}</div>
     </div>
