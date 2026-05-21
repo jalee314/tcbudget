@@ -170,8 +170,14 @@ export default function Sidebar({
       <div className="h-px bg-sidebar-border mx-3" />
 
       <nav className="flex-1 px-2 py-3 overflow-y-auto overflow-x-hidden">
+        {/* PAGES label is constrained to the same w-12 (48px) column as the
+            NavItem icon container and centered inside it, so its horizontal
+            center sits at the same x as the icons below — and that x is
+            independent of the sidebar's width (always 32px from sidebar left
+            with nav px-2 + w-12), so the label doesn't shift between the
+            collapsed and expanded states. */}
         <div
-          className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-sidebar-section-label whitespace-nowrap"
+          className="w-12 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-sidebar-section-label whitespace-nowrap text-center"
         >
           Pages
         </div>

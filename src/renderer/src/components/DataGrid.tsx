@@ -930,7 +930,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
             <button
               key={tab}
               onClick={() => setViewFilter(tab)}
-              className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
                 viewFilter === tab
                   ? 'bg-white text-surface-900 shadow-sm'
                   : 'text-surface-500 hover:text-surface-700'
@@ -949,7 +949,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
             placeholder="Filter items..."
             value={filterText}
             onChange={onFilterTextChange}
-            className="input-dark !pl-10 py-2 text-sm"
+            className="input-dark !pl-10 !py-2 !text-xs"
           />
         </div>
         <span className="text-xs text-surface-500 tabular-nums">
@@ -961,7 +961,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
             <button
               key={p}
               onClick={() => applyPreset(p)}
-              className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
                 activePreset === p
                   ? 'bg-white text-surface-900 shadow-sm'
                   : 'text-surface-500 hover:text-surface-700'
@@ -985,7 +985,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
             <path d="M9 16h4"/>
           </svg>
           Held in P&L
-          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${includeHeldInPL ? 'bg-accent/15 text-accent-dark' : 'bg-surface-200 text-surface-600'}`}>
+          <span className={`text-[9px] font-bold px-1 py-0 leading-none rounded ${includeHeldInPL ? 'bg-accent/15 text-accent-dark' : 'bg-surface-200 text-surface-600'}`}>
             {includeHeldInPL ? 'ON' : 'OFF'}
           </span>
         </button>
@@ -1000,7 +1000,7 @@ export default function DataGrid({ rowData, onCellValueChanged, onDeleteRow, onT
             </svg>
             Columns
             {hiddenColumns.size > 0 && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-accent/15 text-accent-dark">
+              <span className="text-[9px] font-bold px-1 py-0 leading-none rounded bg-accent/15 text-accent-dark">
                 {TOGGLEABLE_COLUMNS.length - hiddenColumns.size}/{TOGGLEABLE_COLUMNS.length}
               </span>
             )}
