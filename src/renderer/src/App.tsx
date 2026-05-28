@@ -9,6 +9,7 @@ import OpenModal from './components/OpenModal'
 import PulledFromEditor from './components/PulledFromEditor'
 import PackOpenAnimation from './components/PackOpenAnimation'
 import AnalyticsPage from './components/AnalyticsPage'
+import HistoryPage from './components/HistoryPage'
 import MarketPage, { type WatchlistItem } from './components/MarketPage'
 import { InventoryCard, SearchCard, SealedProduct, PortfolioSummary } from './types'
 import { v4 as uuidv4 } from 'uuid'
@@ -26,7 +27,7 @@ const AUTO_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000 // 12 hours
 // Analytics and Market are temporarily hidden from the sidebar; only Portfolio
 // and Settings are reachable. Old persisted values for the hidden pages fall
 // back to 'portfolio' so users don't get stranded on a page with no nav.
-const VALID_PAGES: Page[] = ['portfolio', 'settings']
+const VALID_PAGES: Page[] = ['portfolio', 'history', 'settings']
 
 function loadWatchlist(): WatchlistItem[] {
   try {
@@ -496,28 +497,28 @@ export default function App() {
       ))
       return
     }
-    // For single-quantity items skip the modal and mark sold immediately
-    if (card.quantity === 1) {
-      const saleDate = new Date().toISOString().split('T')[0]
-      const salePrice = card.market_price ?? 0
+    // Marking as sold — always open modal so the user picks date + price.
+    // The confirm handler decides whether to split the row based on qty.
+    setSellingCard(card)
+  }, [])
+
+  const handleConfirmSale = useCallback((qtySold: number, salePrice: number, saleDate: string) => {
+    const card = sellingCard
+    if (!card) return
+
+    // Edit-mode: card is already sold, update sale_date + sale_price in place.
+    // Qty isn't editable in this mode, so no row split.
+    if (card.is_sold === 1) {
       if (window.electronAPI) {
-        window.electronAPI.db.update(card.id, 'is_sold', 1).catch(console.error)
         window.electronAPI.db.update(card.id, 'sale_price', salePrice).catch(console.error)
         window.electronAPI.db.update(card.id, 'sale_date', saleDate).catch(console.error)
       }
       setInventory(prev => prev.map(c =>
-        c.id === card.id ? { ...c, is_sold: 1, sale_price: salePrice, sale_date: saleDate } : c
+        c.id === card.id ? { ...c, sale_price: salePrice, sale_date: saleDate } : c
       ))
+      setSellingCard(null)
       return
     }
-    // Marking as sold — open modal to collect qty + price
-    setSellingCard(card)
-  }, [])
-
-  const handleConfirmSale = useCallback((qtySold: number, salePrice: number) => {
-    const card = sellingCard
-    if (!card) return
-    const saleDate = new Date().toISOString().split('T')[0]
 
     if (qtySold >= card.quantity) {
       if (window.electronAPI) {
@@ -801,6 +802,13 @@ export default function App() {
               />
             </div>
           </>
+        )}
+        {currentPage === 'history' && (
+          <HistoryPage
+            inventory={inventory}
+            onNavigateToPortfolio={() => updateCurrentPage('portfolio')}
+            onEditSale={(card) => setSellingCard(card)}
+          />
         )}
         {currentPage === 'analytics' && (
           <AnalyticsPage inventory={inventory} />

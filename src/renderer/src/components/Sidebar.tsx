@@ -1,6 +1,6 @@
 import React from 'react'
 
-export type Page = 'portfolio' | 'analytics' | 'market' | 'settings'
+export type Page = 'portfolio' | 'history' | 'analytics' | 'market' | 'settings'
 
 interface SidebarProps {
   collapsed: boolean
@@ -70,6 +70,13 @@ const Icons = {
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 7h18l-1.5 11a2 2 0 0 1-2 1.75H6.5a2 2 0 0 1-2-1.75L3 7z" />
       <path d="M8 7V5a4 4 0 0 1 8 0v2" />
+    </svg>
+  ),
+  history: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12a9 9 0 1 0 3-6.7" />
+      <polyline points="3 4 3 10 9 10" />
+      <polyline points="12 7 12 12 16 14" />
     </svg>
   ),
   settings: (
@@ -188,6 +195,13 @@ export default function Sidebar({
             label="Portfolio"
             icon={Icons.portfolio}
             onClick={() => onPageChange('portfolio')}
+          />
+          <NavItem
+            collapsed={collapsed}
+            active={currentPage === 'history'}
+            label="History"
+            icon={Icons.history}
+            onClick={() => onPageChange('history')}
           />
         </div>
       </nav>
