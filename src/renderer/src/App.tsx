@@ -10,6 +10,7 @@ import PulledFromEditor from './components/PulledFromEditor'
 import PackOpenAnimation from './components/PackOpenAnimation'
 import AnalyticsPage from './components/AnalyticsPage'
 import HistoryPage from './components/HistoryPage'
+import PullMapPage from './components/PullMapPage'
 import MarketPage, { type WatchlistItem } from './components/MarketPage'
 import { InventoryCard, SearchCard, SealedProduct, PortfolioSummary } from './types'
 import { v4 as uuidv4 } from 'uuid'
@@ -27,7 +28,7 @@ const AUTO_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000 // 12 hours
 // Analytics and Market are temporarily hidden from the sidebar; only Portfolio
 // and Settings are reachable. Old persisted values for the hidden pages fall
 // back to 'portfolio' so users don't get stranded on a page with no nav.
-const VALID_PAGES: Page[] = ['portfolio', 'history', 'settings']
+const VALID_PAGES: Page[] = ['portfolio', 'history', 'pullmap', 'settings']
 
 function loadWatchlist(): WatchlistItem[] {
   try {
@@ -809,6 +810,9 @@ export default function App() {
             onNavigateToPortfolio={() => updateCurrentPage('portfolio')}
             onEditSale={(card) => setSellingCard(card)}
           />
+        )}
+        {currentPage === 'pullmap' && (
+          <PullMapPage inventory={inventory} />
         )}
         {currentPage === 'analytics' && (
           <AnalyticsPage inventory={inventory} />
