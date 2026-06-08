@@ -3,7 +3,24 @@
     "allow": [
       "Bash(npx electron-vite *)",
       "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
-      "Bash(grep -n \"translate\\(0px, \\\\${dragY}px\\)\\\\|translate\\(-50%, -260%\\)\" /Users/jason.leee/tcbudget/src/renderer/src/components/PackOpenAnimation.tsx)"
+      "Bash(grep -n \"translate\\(0px, \\\\${dragY}px\\)\\\\|translate\\(-50%, -260%\\)\" /Users/jason.leee/tcbudget/src/renderer/src/components/PackOpenAnimation.tsx)",
+      "Bash(file *.png)",
+      "Bash(sips -g pixelWidth -g pixelHeight /Users/jason.leee/tcbudget/docs/assets/screenshot-portfolio.png /Users/jason.leee/tcbudget/docs/assets/screenshot-pull-map.png)",
+      "Bash(ls -lat /tmp 2>/dev/null | head -20 && echo \"---\" && ls -lat /var/folders/*/T/*.png 2>/dev/null | head -20)",
+      "Read(//private/tmp/**)",
+      "Read(//private/var/folders/**)",
+      "Bash(find /private/tmp /var/folders /Users/jason.leee/Library/Caches -name \"*.png\" -newer /tmp -mmin -30 2>/dev/null | head -30)",
+      "Read(//Users/jason.leee/Library/Caches/**)",
+      "Bash(find /Users/jason.leee -name \"*.png\" -mmin -30 2>/dev/null | grep -vE \"\\(node_modules|\\\\.git/|Library/Caches|Library/Containers/.*Cache\\)\" | head -30)",
+      "Read(//Users/jason.leee/**)",
+      "Bash(cp \"/Users/jason.leee/Desktop/Screenshot 2026-06-07 at 9.00.09 PM.png\" /Users/jason.leee/tcbudget/docs/assets/screenshot-portfolio.png)",
+      "Bash(cp \"/Users/jason.leee/Desktop/Screenshot 2026-06-07 at 9.00.37 PM.png\" /Users/jason.leee/tcbudget/docs/assets/screenshot-pull-map.png)",
+      "Bash(cp \"/Users/jason.leee/Desktop/Screenshot 2026-06-07 at 9.00.25 PM.png\" /Users/jason.leee/tcbudget/docs/assets/screenshot-card-detail.png)",
+      "Bash(cp '/Users/jason.leee/Desktop/Screenshot 2026-06-07 at 9.00.09 PM.png' /Users/jason.leee/tcbudget/docs/assets/screenshot-portfolio.png)",
+      "Bash(cp '/Users/jason.leee/Desktop/Screenshot 2026-06-07 at 9.00.37 PM.png' /Users/jason.leee/tcbudget/docs/assets/screenshot-pull-map.png)",
+      "Bash(cp '/Users/jason.leee/Desktop/Screenshot 2026-06-07 at 9.00.25 PM.png' /Users/jason.leee/tcbudget/docs/assets/screenshot-card-detail.png)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(git checkout *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\jason\\tcbudget\\src\\renderer\\src\\assets"
