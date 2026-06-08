@@ -20,7 +20,10 @@
       "Bash(cp '/Users/jason.leee/Desktop/Screenshot 2026-06-07 at 9.00.37 PM.png' /Users/jason.leee/tcbudget/docs/assets/screenshot-pull-map.png)",
       "Bash(cp '/Users/jason.leee/Desktop/Screenshot 2026-06-07 at 9.00.25 PM.png' /Users/jason.leee/tcbudget/docs/assets/screenshot-card-detail.png)",
       "Bash(echo \"exit: $?\")",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(sips -g all /Users/jason.leee/tcbudget/docs/assets/screenshot-portfolio.png)",
+      "Bash(sips -c 100 100 --cropOffset 0 0 /Users/jason.leee/tcbudget/docs/assets/screenshot-portfolio.png --out /tmp/topleft.png)",
+      "Read(//tmp/**)"
     ],
     "additionalDirectories": [
       "C:\\Users\\jason\\tcbudget\\src\\renderer\\src\\assets"
