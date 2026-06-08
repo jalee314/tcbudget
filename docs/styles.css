@@ -174,43 +174,87 @@ main {
   margin-top: 1rem;
 }
 
+.screenshot-hero {
+  margin: 2.5rem auto 0;
+  max-width: 100%;
+}
+
+.screenshot-hero img,
+.pull-map-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--surface-100);
+  border-radius: 0.75rem;
+  box-shadow:
+    0 4px 6px rgb(0 0 0 / 4%),
+    0 12px 32px rgb(0 0 0 / 8%);
+}
+
+.pull-map {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2.5rem;
+  align-items: center;
+  padding: 2.5rem 1.75rem;
+  margin-top: 1rem;
+  background: #fff;
+  border: 1px solid var(--surface-100);
+  border-radius: 1rem;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
+.pull-map-copy h2 {
+  margin: 0.5rem 0 0.75rem;
+  font-size: 1.75rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.pull-map-copy p {
+  margin: 0 0 1rem;
+  color: var(--surface-700);
+}
+
+.pull-map-figure {
+  margin: 0;
+}
+
+@media (max-width: 720px) {
+  .pull-map {
+    grid-template-columns: 1fr;
+    padding: 1.75rem 1.25rem;
+  }
+}
+
 .features {
   padding: 2rem 0 3rem;
 }
 
-.features h2,
-.download h2 {
+.features h2 {
   text-align: center;
   font-size: 1.75rem;
-  margin: 0 0 2rem;
+  margin: 0 0 1.5rem;
 }
 
-.feature-grid {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1rem;
+.features-copy {
+  max-width: 40rem;
+  margin: 0 auto;
+  text-align: center;
 }
 
-.feature-grid li {
-  background: #fff;
-  border: 1px solid var(--surface-100);
-  border-radius: 0.875rem;
-  padding: 1.25rem 1.35rem;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
-}
-
-.feature-grid h3 {
-  margin: 0 0 0.35rem;
-  font-size: 1.05rem;
-}
-
-.feature-grid p {
-  margin: 0;
-  font-size: 0.9375rem;
+.features-copy p {
+  margin: 0 0 1rem;
+  font-size: 1.0625rem;
   color: var(--surface-700);
+}
+
+.features-copy p:last-child {
+  margin-bottom: 0;
+}
+
+.features-copy strong {
+  color: var(--surface-900);
 }
 
 .download.panel {
@@ -218,28 +262,8 @@ main {
   background: var(--surface-950);
   color: #e5e7eb;
   border-radius: 1rem;
-  padding: 2.5rem 1.5rem;
+  padding: 2rem 1.5rem;
   margin-top: 1rem;
-}
-
-.download.panel h2 {
-  color: #fff;
-}
-
-.download.panel p {
-  max-width: 36rem;
-  margin: 0 auto 1.5rem;
-}
-
-.download.panel code {
-  background: rgb(255 255 255 / 10%);
-  padding: 0.1em 0.35em;
-  border-radius: 0.25rem;
-  font-size: 0.875em;
-}
-
-.download.panel .note {
-  color: #9ca3af;
 }
 
 footer {
