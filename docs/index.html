@@ -118,15 +118,5 @@
       </p>
     </footer>
 
-    <script>
-      fetch('https://api.github.com/repos/jalee314/tcbudget/releases/latest')
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (!data?.tag_name) return
-          const el = document.getElementById('release-note')
-          if (el) el.textContent = 'Latest release: ' + data.tag_name + ' — pick the installer for your OS on the releases page.'
-        })
-        .catch(() => {})
-    </script>
   </body>
 </html>
