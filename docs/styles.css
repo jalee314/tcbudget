@@ -204,6 +204,14 @@ main {
   box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
 }
 
+.pull-map-reverse .pull-map-figure {
+  order: 1;
+}
+
+.pull-map-reverse .pull-map-copy {
+  order: 2;
+}
+
 .pull-map-copy h2 {
   margin: 0.5rem 0 0.75rem;
   font-size: 1.75rem;
@@ -224,6 +232,14 @@ main {
   .pull-map {
     grid-template-columns: 1fr;
     padding: 1.75rem 1.25rem;
+  }
+
+  .pull-map-reverse .pull-map-figure {
+    order: 2;
+  }
+
+  .pull-map-reverse .pull-map-copy {
+    order: 1;
   }
 }
 
@@ -255,15 +271,6 @@ main {
 
 .features-copy strong {
   color: var(--surface-900);
-}
-
-.download.panel {
-  text-align: center;
-  background: var(--surface-950);
-  color: #e5e7eb;
-  border-radius: 1rem;
-  padding: 2rem 1.5rem;
-  margin-top: 1rem;
 }
 
 footer {
