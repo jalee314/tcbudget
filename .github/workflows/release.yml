@@ -36,6 +36,8 @@ jobs:
 
       - name: Build app
         run: npm run build
+        env:
+          JUSTTCG_API_KEY: ${{ secrets.JUSTTCG_API_KEY }}
 
       - name: Package & publish
         run: npx electron-builder --${{ matrix.platform }} --publish always
