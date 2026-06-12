@@ -67,6 +67,11 @@ export interface PortfolioSummary {
   unrealizedPL: number
   unrealizedPLPercent: number
   realizedGains: number
+  // Unit quantities (not row counts) of bought-only items (parent_id unset)
+  // backing the cost basis figure — a qty-2 bundle counts as 2.
+  boughtHeldCount: number
+  boughtOpenedCount: number
+  boughtSoldCount: number
   soldVsMarketPercent: number | null
   heldCount: number
   soldCount: number
