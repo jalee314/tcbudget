@@ -201,10 +201,18 @@ export default function App() {
     const opened = inventory.filter(c => c.is_opened === 1 && !c.is_sold)
     const sold = inventory.filter(c => c.is_sold === 1)
 
+    // Cost basis only counts product actually bought. Excludes cards pulled from
+    // an opened pack (parent_id set — already counted via the sealed product) and
+    // gifted items (purchase_price 0). This matches how History defines "spent".
+    // Directly-bought singles (no parent_id, real price) still count.
+    const wasBought = (c: InventoryCard) => !c.parent_id && c.purchase_price > 0
+    const heldBought = held.filter(wasBought)
+    const openedBought = opened.filter(wasBought)
+    const soldBought = sold.filter(wasBought)
     const totalCostBasis =
-      held.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0) +
-      opened.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0) +
-      sold.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
+      heldBought.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0) +
+      openedBought.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0) +
+      soldBought.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
     // Opened sealed items have no resale value as sealed product — treated as $0 market value
     const totalMarketValue = held.reduce((sum, c) => sum + c.market_price * c.quantity, 0)
     // P&L excludes per-item "keeping" flags from both sides. When the global toggle is
@@ -222,9 +230,13 @@ export default function App() {
     const unrealizedPLPercent = heldCostBasis > 0 ? (unrealizedPL / heldCostBasis) * 100 : 0
     const kept = held.filter(c => c.is_kept === 1)
     const keptValue = kept.reduce((sum, c) => sum + c.market_price * c.quantity, 0)
+    // Realized gains = completed sales only: for each sold item, sale proceeds
+    // minus what was paid for it. Opening a pack is NOT a realized loss — the
+    // pulled cards are still owned and their value lives in market value /
+    // unrealized P&L — so opened-pack cost must not be subtracted here.
+    // `sold` is the is_sold === 1 set, so a card counts only once actually sold.
     const realizedGains =
-      sold.reduce((sum, c) => sum + c.sale_price - (c.purchase_price * c.quantity), 0) -
-      opened.reduce((sum, c) => sum + c.purchase_price * c.quantity, 0)
+      sold.reduce((sum, c) => sum + c.sale_price - (c.purchase_price * c.quantity), 0)
     const soldRevenue = sold.reduce((sum, c) => sum + c.sale_price, 0)
     const soldMarketValue = sold.reduce((sum, c) => sum + c.market_price * c.quantity, 0)
     const soldVsMarketPercent = soldMarketValue > 0 ? (soldRevenue / soldMarketValue) * 100 : null
@@ -239,6 +251,9 @@ export default function App() {
       unrealizedPL,
       unrealizedPLPercent,
       realizedGains,
+      boughtHeldCount: heldBought.reduce((sum, c) => sum + c.quantity, 0),
+      boughtOpenedCount: openedBought.reduce((sum, c) => sum + c.quantity, 0),
+      boughtSoldCount: soldBought.reduce((sum, c) => sum + c.quantity, 0),
       soldVsMarketPercent,
       heldCount: held.length,
       soldCount: sold.length,
